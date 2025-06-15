@@ -95,7 +95,6 @@ export default function Home() {
         setError('※最新100件のみ表示されています');
       }
       
-      // ログを保存
       const roomName = rooms.find(r => r.room_id === selectedRoom)?.name || 'Unknown';
       const newLog = {
         id: Date.now().toString(),
@@ -123,23 +122,31 @@ export default function Home() {
 
   const toggleAutoSave = () => {
     if (!selectedRoom) return;
+    
+    const currentRoom = rooms.find(r => r.room_id === selectedRoom);
+    if (!currentRoom) {
+      setError('ルーム情報が見つかりません');
+      return;
+    }
+    
     let saved = JSON.parse(localStorage.getItem('autoSaveRooms') || '[]');
     const roomData = {
       roomId: selectedRoom,
-      roomName: rooms.find(r => r.room_id === selectedRoom)?.name,
+      roomName: currentRoom.name,
       days: autoSaveDays
     };
+    
     const existingIndex = saved.findIndex(r => r.roomId === selectedRoom);
     if (existingIndex >= 0) {
       saved.splice(existingIndex, 1);
-      setShowSuccess('自動保存を【解除】しました');
+      setShowSuccess(`${currentRoom.name}の自動保存を【解除】しました`);
     } else {
       if (saved.length >= 10) {
         setError('自動保存は最大10個までです');
         return;
       }
       saved.push(roomData);
-      setShowSuccess(`自動保存を【開始】しました（${autoSaveDays}日ごと）`);
+      setShowSuccess(`${currentRoom.name}を自動保存に【追加】しました（${autoSaveDays}日ごと）`);
     }
     localStorage.setItem('autoSaveRooms', JSON.stringify(saved));
     setAutoSaveRooms(saved);
@@ -156,6 +163,15 @@ export default function Home() {
       setShowSuccess(`${saved[index].roomName}の保存期間を${newDays}日に変更しました`);
       setTimeout(() => setShowSuccess(false), 3000);
     }
+  };
+
+  const removeAutoSave = (roomId, roomName) => {
+    let saved = JSON.parse(localStorage.getItem('autoSaveRooms') || '[]');
+    saved = saved.filter(r => r.roomId !== roomId);
+    localStorage.setItem('autoSaveRooms', JSON.stringify(saved));
+    setAutoSaveRooms(saved);
+    setShowSuccess(`${roomName}の自動保存を解除しました`);
+    setTimeout(() => setShowSuccess(false), 3000);
   };
 
   const isAutoSaveEnabled = (roomId) => {
@@ -199,6 +215,21 @@ export default function Home() {
     window.scrollTo(0, 0);
   };
 
+  const fixRoomNames = () => {
+    let saved = JSON.parse(localStorage.getItem('autoSaveRooms') || '[]');
+    saved = saved.map(savedRoom => {
+      const room = rooms.find(r => r.room_id === savedRoom.roomId);
+      if (room) {
+        savedRoom.roomName = room.name;
+      }
+      return savedRoom;
+    });
+    localStorage.setItem('autoSaveRooms', JSON.stringify(saved));
+    setAutoSaveRooms(saved);
+    setShowSuccess('ルーム名を更新しました');
+    setTimeout(() => setShowSuccess(false), 3000);
+  };
+
   return (
     <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
       <h1 style={{ textAlign: 'center', color: '#2563eb' }}>
@@ -210,6 +241,26 @@ export default function Home() {
           初回のみAPIトークンの設定が必要です
         </p>
       </div>
+      
+      {/* ルーム名修正ボタン（一時的） */}
+      {autoSaveRooms.length > 0 && autoSaveRooms.some(r => !r.roomName) && (
+        <button
+          onClick={fixRoomNames}
+          style={{
+            width: '100%',
+            padding: '10px',
+            backgroundColor: '#f59e0b',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            marginBottom: '20px',
+            cursor: 'pointer',
+            fontWeight: 'bold'
+          }}
+        >
+          🔧 ルーム名を修正（1回だけクリック）
+        </button>
+      )}
       
       {/* 自動保存状況の表示 */}
       {autoSaveRooms.length > 0 && (
@@ -262,14 +313,7 @@ export default function Home() {
                     </select>
                   </div>
                   <button
-                    onClick={() => {
-                      let saved = JSON.parse(localStorage.getItem('autoSaveRooms') || '[]');
-                      saved = saved.filter(r => r.roomId !== room.roomId);
-                      localStorage.setItem('autoSaveRooms', JSON.stringify(saved));
-                      setAutoSaveRooms(saved);
-                      setShowSuccess(`${room.roomName}の自動保存を解除しました`);
-                      setTimeout(() => setShowSuccess(false), 3000);
-                    }}
+                    onClick={() => removeAutoSave(room.roomId, room.roomName || room.roomId)}
                     style={{
                       padding: '5px 10px',
                       backgroundColor: '#ef4444',
@@ -356,7 +400,6 @@ export default function Home() {
           </button>
         </div>
         
-        {/* 新規自動保存の期間選択 */}
         {selectedRoom && !isAutoSaveEnabled(selectedRoom) && autoSaveRooms.length < 10 && (
           <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ fontSize: '14px' }}>自動保存の期間:</span>
