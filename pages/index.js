@@ -68,11 +68,11 @@ export default function Home() {
     let updatedLogs = [...currentLogs];
 
     for (const room of savedSettings.slice(0, 10)) {
-      const lastSave = updatedLogs.find(log => log.roomId === room.roomId && log.isAutoSave);
+      const lastSave = updatedLogs.find(log => log.roomId.toString() === room.roomId.toString() && log.isAutoSave);
       const lastSaveDate = lastSave ? new Date(lastSave.savedAt) : null;
 
       // Save if it's the first time or if the last save was more than 3 days ago
-      if (!lastSaveDate || (now - lastSaveDate) > 3 * 24 * 60 * 60 * 1000) {
+      if (!lastSaveDate || (now.getTime() - lastSaveDate.getTime()) > 3 * 24 * 60 * 60 * 1000) {
         const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
 
         try {
@@ -188,9 +188,10 @@ export default function Home() {
         isAutoSave: false
       };
       
-      const logs = JSON.parse(localStorage.getItem('savedLogs') || '[]');
-      logs.unshift(newLog);
-      const trimmedLogs = logs.slice(0, 50);
+      // (FIXED) Use immutable update for savedLogs as well for consistency
+      const currentLogs = JSON.parse(localStorage.getItem('savedLogs') || '[]');
+      const newLogs = [newLog, ...currentLogs];
+      const trimmedLogs = newLogs.slice(0, 50);
       localStorage.setItem('savedLogs', JSON.stringify(trimmedLogs));
       loadSavedLogs(); // Reload logs to update the UI
       
@@ -201,49 +202,50 @@ export default function Home() {
     setLoading(false);
   };
 
-  // --- (FIXED) Toggling Auto-Save Setting ---
+  // --- (FIXED v2) Toggling Auto-Save Setting using Functional Update ---
   const toggleAutoSave = () => {
     if (!selectedRoom) {
       setError('ルームを選択してください');
       return;
     }
 
-    // Check if the room is already in the auto-save list using the current React state.
-    // This makes the React state the "single source of truth".
-    const isExisting = autoSaveRooms.some(r => r.roomId.toString() === selectedRoom);
-    let newAutoSaveRooms;
+    // Use the functional update form of setState (`set*(prevState => newState)`).
+    // This guarantees that we are always working with the most up-to-date state,
+    // avoiding potential issues with stale state during rapid updates.
+    setAutoSaveRooms(currentAutoSaveRooms => {
+      const isExisting = currentAutoSaveRooms.some(r => r.roomId.toString() === selectedRoom);
+      let newAutoSaveRooms;
 
-    if (isExisting) {
-      // **IMMUTABLE DELETE**: Use `filter` to create a new array without the selected room.
-      // This does NOT modify the original `autoSaveRooms` array.
-      newAutoSaveRooms = autoSaveRooms.filter(r => r.roomId.toString() !== selectedRoom);
-      setShowSuccess('自動保存を解除しました');
-    } else {
-      // **ADD**: Check if the limit has been reached.
-      if (autoSaveRooms.length >= 10) {
-        setError('自動保存は最大10個までです');
-        return;
+      if (isExisting) {
+        // IMMUTABLE DELETE: Create a new array excluding the selected room.
+        newAutoSaveRooms = currentAutoSaveRooms.filter(r => r.roomId.toString() !== selectedRoom);
+        setShowSuccess('自動保存を解除しました');
+      } else {
+        // ADD: First, check the limit.
+        if (currentAutoSaveRooms.length >= 10) {
+          setError('自動保存は最大10個までです');
+          // If limit is reached, return the original state unchanged.
+          return currentAutoSaveRooms; 
+        }
+        
+        const roomData = {
+          roomId: selectedRoom,
+          roomName: rooms.find(r => r.room_id.toString() === selectedRoom)?.name || 'Unknown Room',
+        };
+        
+        // IMMUTABLE ADD: Create a new array with the new room data.
+        newAutoSaveRooms = [...currentAutoSaveRooms, roomData];
+        setShowSuccess(`自動保存を設定しました（${newAutoSaveRooms.length}/10）`);
       }
-      
-      const roomData = {
-        roomId: selectedRoom,
-        roomName: rooms.find(r => r.room_id.toString() === selectedRoom)?.name || 'Unknown Room',
-      };
-      
-      // **IMMUTABLE ADD**: Use spread syntax `...` to create a new array
-      // with the existing rooms plus the new one.
-      newAutoSaveRooms = [...autoSaveRooms, roomData];
-      setShowSuccess(`自動保存を設定しました（${newAutoSaveRooms.length}/10）`);
-    }
 
-    // 1. Update the React state with the new array.
-    //    React detects the change because `newAutoSaveRooms` is a new array object.
-    setAutoSaveRooms(newAutoSaveRooms);
-    
-    // 2. Persist the new, updated state to local storage.
-    localStorage.setItem('autoSaveRooms', JSON.stringify(newAutoSaveRooms));
+      // After calculating the new state, update local storage to keep it in sync.
+      localStorage.setItem('autoSaveRooms', JSON.stringify(newAutoSaveRooms));
+      
+      // Finally, return the new state. React will use this to update the component.
+      return newAutoSaveRooms;
+    });
 
-    // Hide success message after a delay.
+    // This part remains outside the updater function.
     setTimeout(() => setShowSuccess(false), 2000);
   };
 
@@ -256,20 +258,25 @@ export default function Home() {
       localStorage.setItem('chatworkApiToken', token);
       loadRooms(token);
     } else {
-      // Clear rooms if token is removed
       setRooms([]);
     }
   };
 
   const isAutoSaveEnabled = (roomId) => {
-    // This function now correctly reflects the UI state because `autoSaveRooms` is properly updated.
     return autoSaveRooms.some(r => r.roomId.toString() === roomId.toString());
   };
 
   const copyToClipboard = async () => {
     if (!messages) return;
     try {
-      await navigator.clipboard.writeText(messages);
+      // Use execCommand as a fallback for iframe environments where navigator.clipboard might be restricted.
+      const textArea = document.createElement("textarea");
+      textArea.value = messages;
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
       setShowSuccess('コピーしました！');
       setTimeout(() => setShowSuccess(false), 2000);
     } catch (err) {
@@ -295,7 +302,6 @@ export default function Home() {
   const viewSavedLog = (log) => {
     setMessages(log.content);
     setMessageCount(log.count || 0);
-    // Scroll to the top of the page to see the result.
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -347,10 +353,10 @@ export default function Home() {
               fontSize: '16px',
               backgroundColor: !apiToken ? '#f3f4f6' : 'white'
             }}
-            disabled={!apiToken}
+            disabled={!apiToken || rooms.length === 0}
           >
             <option value="">
-              {!apiToken ? 'まずAPIトークンを入力してください' : 'ルームを選択してください'}
+              {!apiToken ? 'まずAPIトークンを入力' : rooms.length === 0 ? 'ルームを読込中...' : 'ルームを選択'}
             </option>
             {rooms.map((room) => (
               <option key={room.room_id} value={room.room_id}>
@@ -510,7 +516,7 @@ export default function Home() {
           borderRadius: '8px',
           boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
           zIndex: 1000,
-          animation: 'fadeInOut 2s ease-in-out'
+          animation: 'fadeInOut 2.5s ease-in-out'
         }}>
           {showSuccess}
         </div>
@@ -518,8 +524,8 @@ export default function Home() {
       <style jsx global>{`
         @keyframes fadeInOut {
           0% { opacity: 0; transform: translate(-50%, -20px); }
-          20% { opacity: 1; transform: translate(-50%, 0); }
-          80% { opacity: 1; transform: translate(-50%, 0); }
+          15% { opacity: 1; transform: translate(-50%, 0); }
+          85% { opacity: 1; transform: translate(-50%, 0); }
           100% { opacity: 0; transform: translate(-50%, -20px); }
         }
       `}</style>
