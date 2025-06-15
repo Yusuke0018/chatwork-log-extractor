@@ -28,10 +28,6 @@ export default function Home() {
     
     loadAutoSaveSettings();
     loadSavedLogs();
-    
-    setTimeout(() => {
-      checkAutoSave();
-    }, 2000);
   }, []);
 
   const loadAutoSaveSettings = () => {
@@ -42,70 +38,6 @@ export default function Home() {
   const loadSavedLogs = () => {
     const logs = JSON.parse(localStorage.getItem('savedLogs') || '[]');
     setSavedLogs(logs);
-  };
-
-  const checkAutoSave = async () => {
-    const saved = JSON.parse(localStorage.getItem('autoSaveRooms') || '[]');
-    const logs = JSON.parse(localStorage.getItem('savedLogs') || '[]');
-    const token = localStorage.getItem('chatworkApiToken');
-    
-    if (!token || saved.length === 0) return;
-    
-    const now = new Date();
-    let autoSaveCount = 0;
-    
-    for (const room of saved.slice(0, 10)) {
-      const lastSave = logs.find(log => log.roomId === room.roomId && log.isAutoSave);
-      const lastSaveDate = lastSave ? new Date(lastSave.savedAt) : null;
-      
-      if (!lastSaveDate || (now - lastSaveDate) > 3 * 24 * 60 * 60 * 1000) {
-        const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
-        
-        try {
-          const response = await fetch('/api/chatwork/messages', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              apiToken: token,
-              roomId: room.roomId,
-              startDate: threeDaysAgo.toISOString().split('T')[0],
-              endDate: now.toISOString().split('T')[0],
-            }),
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            
-            const logEntry = {
-              id: `auto_${room.roomId}_${Date.now()}`,
-              roomName: room.roomName,
-              roomId: room.roomId,
-              content: data.messages,
-              count: data.count,
-              startDate: threeDaysAgo.toISOString().split('T')[0],
-              endDate: now.toISOString().split('T')[0],
-              savedAt: now.toISOString(),
-              isAutoSave: true
-            };
-            
-            logs.unshift(logEntry);
-            autoSaveCount++;
-          }
-        } catch (err) {
-          console.error(`自動保存エラー (${room.roomName}):`, err);
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-    }
-    
-    if (autoSaveCount > 0) {
-      const trimmedLogs = logs.slice(0, 50);
-      localStorage.setItem('savedLogs', JSON.stringify(trimmedLogs));
-      loadSavedLogs();
-      setShowSuccess(`${autoSaveCount}件の自動保存を実行しました`);
-      setTimeout(() => setShowSuccess(false), 3000);
-    }
   };
 
   const loadRooms = async (token) => {
@@ -124,6 +56,8 @@ export default function Home() {
         { room_id: '12345', name: '全体ミーティング' },
         { room_id: '12346', name: '経営会議' },
         { room_id: '12347', name: 'スタッフルーム' },
+        { room_id: '12348', name: '開発チーム' },
+        { room_id: '12349', name: '営業チーム' },
       ]);
     }
   };
@@ -209,9 +143,11 @@ export default function Home() {
     const existingIndex = saved.findIndex(r => r.roomId === selectedRoom);
     
     if (existingIndex >= 0) {
+      // 削除
       saved.splice(existingIndex, 1);
       setShowSuccess('自動保存を解除しました');
     } else {
+      // 追加
       if (saved.length >= 10) {
         setError('自動保存は最大10個までです');
         return;
@@ -257,6 +193,12 @@ export default function Home() {
     setMessages(log.content);
     setMessageCount(log.count || 0);
     window.scrollTo(0, 0);
+  };
+
+  // デバッグ用：自動保存設定を確認
+  const debugAutoSave = () => {
+    console.log('自動保存設定:', autoSaveRooms);
+    alert(`現在の自動保存設定: ${autoSaveRooms.length}個\n${autoSaveRooms.map(r => r.roomName).join('\n')}`);
   };
 
   return (
@@ -332,11 +274,46 @@ export default function Home() {
           </button>
         </div>
         {autoSaveRooms.length > 0 && (
-          <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '5px' }}>
-            ⏰ 自動保存中: {autoSaveRooms.length}/10 ルーム
-          </p>
+          <div>
+            <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '5px' }}>
+              ⏰ 自動保存中: {autoSaveRooms.length}/10 ルーム
+            </p>
+            <button 
+              onClick={debugAutoSave}
+              style={{ 
+                fontSize: '10px', 
+                padding: '2px 8px', 
+                marginTop: '5px',
+                backgroundColor: '#f3f4f6',
+                border: '1px solid #e5e7eb',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              設定を確認
+            </button>
+          </div>
         )}
       </div>
+      
+      {/* 自動保存されているルーム一覧 */}
+      {autoSaveRooms.length > 0 && (
+        <div style={{ 
+          marginBottom: '20px', 
+          padding: '10px', 
+          backgroundColor: '#f0f9ff', 
+          borderRadius: '8px',
+          fontSize: '12px'
+        }}>
+          <strong>自動保存設定中：</strong>
+          {autoSaveRooms.map((room, index) => (
+            <span key={room.roomId}>
+              {index > 0 && '、'}
+              {room.roomName}
+            </span>
+          ))}
+        </div>
+      )}
       
       <div style={{ marginBottom: '20px' }}>
         <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
@@ -506,7 +483,7 @@ export default function Home() {
             保存履歴 ({savedLogs.length}件)
           </h3>
           <div style={{ maxHeight: '300px', overflow: 'auto' }}>
-            {savedLogs.slice(0, 10).map((log) => (
+            {savedLogs.slice(0, 20).map((log) => (
               <div
                 key={log.id}
                 onClick={() => viewSavedLog(log)}
@@ -520,3 +497,33 @@ export default function Home() {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                  <strong>{log.roomName}</strong>
+                  <span style={{ fontSize: '14px', color: '#6b7280' }}>{log.count}件</span>
+                </div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                  {log.startDate} 〜 {log.endDate}
+                  {log.isAutoSave && ' 🤖自動'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {showSuccess && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          backgroundColor: '#10b981',
+          color: 'white',
+          padding: '15px 20px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+        }}>
+          {showSuccess}
+        </div>
+      )}
+    </div>
+  );
+}
