@@ -16,8 +16,16 @@ export default function Home() {
   const [savedLogs, setSavedLogs] = useState([]);
   const [debugMode, setDebugMode] = useState(false);
   const [autoSaveProgress, setAutoSaveProgress] = useState(''); // 自動保存の進行状況
+  const [isMobile, setIsMobile] = useState(false);
   
   useEffect(() => {
+    // モバイル判定
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 640);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
     const savedToken = localStorage.getItem('chatworkApiToken');
     if (savedToken) {
       setApiToken(savedToken);
@@ -34,6 +42,8 @@ export default function Home() {
     setStartDate(threeDaysAgo.toISOString().split('T')[0]);
     loadAutoSaveSettings();
     loadSavedLogs();
+    
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
   // 自動保存のチェックと実行
@@ -514,13 +524,30 @@ export default function Home() {
   };
 
   return (
-    <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
-      <h1 style={{ textAlign: 'center', color: '#2563eb' }}>
+    <div style={{ 
+      padding: isMobile ? '10px' : '20px', 
+      maxWidth: '600px', 
+      margin: '0 auto'
+    }}>
+      <h1 style={{ 
+        textAlign: 'center', 
+        color: '#2563eb',
+        fontSize: isMobile ? '24px' : '32px',
+        marginBottom: '20px'
+      }}>
         Chatworkログ抽出
       </h1>
       
-      <div style={{ backgroundColor: '#dbeafe', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
-        <p style={{ margin: 0, fontSize: '14px' }}>
+      <div style={{ 
+        backgroundColor: '#dbeafe', 
+        padding: isMobile ? '12px' : '15px', 
+        borderRadius: '8px', 
+        marginBottom: '20px' 
+      }}>
+        <p style={{ 
+          margin: 0, 
+          fontSize: isMobile ? '13px' : '14px' 
+        }}>
           初回のみAPIトークンの設定が必要です
         </p>
       </div>
@@ -610,14 +637,16 @@ export default function Home() {
           disabled={!apiToken || autoSaveProgress !== ''}
           style={{
             width: '100%',
-            padding: '10px',
+            padding: isMobile ? '12px' : '10px',
             backgroundColor: autoSaveProgress ? '#9ca3af' : '#06b6d4',
             color: 'white',
             border: 'none',
             borderRadius: '8px',
             marginBottom: '20px',
             cursor: apiToken && !autoSaveProgress ? 'pointer' : 'not-allowed',
-            fontWeight: 'bold'
+            fontWeight: 'bold',
+            fontSize: '16px',
+            WebkitAppearance: 'none'
           }}
         >
           🔄 手動でかんたん定期保存
@@ -754,7 +783,12 @@ export default function Home() {
       )}
       
       <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+        <label style={{ 
+          display: 'block', 
+          marginBottom: '5px', 
+          fontWeight: 'bold',
+          fontSize: isMobile ? '14px' : '16px'
+        }}>
           APIトークン
         </label>
         <input
@@ -763,20 +797,31 @@ export default function Home() {
           onChange={handleTokenChange}
           style={{
             width: '100%',
-            padding: '10px',
+            padding: isMobile ? '12px' : '10px',
             border: '2px solid #e5e7eb',
             borderRadius: '8px',
-            fontSize: '16px'
+            fontSize: '16px', // 16px以上でスマホのズームを防ぐ
+            boxSizing: 'border-box', // パディングを含めた幅計算
+            WebkitAppearance: 'none' // iOSのデフォルトスタイルを無効化
           }}
           placeholder="Chatworkの設定画面で取得したトークン"
         />
       </div>
       
       <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+        <label style={{ 
+          display: 'block', 
+          marginBottom: '5px', 
+          fontWeight: 'bold',
+          fontSize: isMobile ? '14px' : '16px'
+        }}>
           ルームを選択
         </label>
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ 
+          display: 'flex', 
+          gap: '10px',
+          flexDirection: isMobile ? 'column' : 'row'
+        }}>
           <select
             value={selectedRoom}
             onChange={(e) => {
@@ -785,11 +830,13 @@ export default function Home() {
             }}
             style={{
               flex: 1,
-              padding: '10px',
+              padding: isMobile ? '12px' : '10px',
               border: '2px solid #e5e7eb',
               borderRadius: '8px',
               fontSize: '16px',
-              backgroundColor: selectedRoom && isAutoSaveEnabled(selectedRoom) ? '#f0f9ff' : 'white'
+              backgroundColor: selectedRoom && isAutoSaveEnabled(selectedRoom) ? '#f0f9ff' : 'white',
+              boxSizing: 'border-box',
+              WebkitAppearance: 'none'
             }}
             disabled={rooms.length === 0}
           >
@@ -804,7 +851,7 @@ export default function Home() {
             onClick={toggleAutoSave}
             disabled={!selectedRoom || (!isAutoSaveEnabled(selectedRoom) && autoSaveRooms.length >= 10)}
             style={{
-              padding: '10px 20px',
+              padding: isMobile ? '12px 20px' : '10px 20px',
               backgroundColor: !selectedRoom ? '#e5e7eb' : isAutoSaveEnabled(selectedRoom) ? '#ef4444' : autoSaveRooms.length >= 10 ? '#9ca3af' : '#10b981',
               color: !selectedRoom ? '#9ca3af' : 'white',
               border: 'none',
@@ -812,7 +859,8 @@ export default function Home() {
               cursor: selectedRoom && (isAutoSaveEnabled(selectedRoom) || autoSaveRooms.length < 10) ? 'pointer' : 'not-allowed',
               fontWeight: 'bold',
               fontSize: '16px',
-              minWidth: '120px'
+              minWidth: isMobile ? '100%' : '120px',
+              WebkitAppearance: 'none'
             }}
           >
             {!selectedRoom ? '選択して' : isAutoSaveEnabled(selectedRoom) ? '🔴 定期OFF' : autoSaveRooms.length >= 10 ? '❌ 上限' : '🟢 定期ON'}
@@ -854,9 +902,17 @@ export default function Home() {
       </div>
       
       <div style={{ marginBottom: '20px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', 
+          gap: '10px' 
+        }}>
           <div>
-            <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '5px', 
+              fontSize: '14px' 
+            }}>
               開始日
             </label>
             <input
@@ -865,14 +921,21 @@ export default function Home() {
               onChange={(e) => setStartDate(e.target.value)}
               style={{
                 width: '100%',
-                padding: '10px',
+                padding: isMobile ? '12px' : '10px',
                 border: '2px solid #e5e7eb',
-                borderRadius: '8px'
+                borderRadius: '8px',
+                fontSize: '16px',
+                boxSizing: 'border-box',
+                WebkitAppearance: 'none'
               }}
             />
           </div>
           <div>
-            <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '5px', 
+              fontSize: '14px' 
+            }}>
               終了日
             </label>
             <input
@@ -881,9 +944,12 @@ export default function Home() {
               onChange={(e) => setEndDate(e.target.value)}
               style={{
                 width: '100%',
-                padding: '10px',
+                padding: isMobile ? '12px' : '10px',
                 border: '2px solid #e5e7eb',
-                borderRadius: '8px'
+                borderRadius: '8px',
+                fontSize: '16px',
+                boxSizing: 'border-box',
+                WebkitAppearance: 'none'
               }}
             />
           </div>
@@ -895,14 +961,16 @@ export default function Home() {
         disabled={loading || !apiToken}
         style={{
           width: '100%',
-          padding: '15px',
+          padding: isMobile ? '16px' : '15px',
           backgroundColor: loading || !apiToken ? '#9ca3af' : '#2563eb',
           color: 'white',
           border: 'none',
           borderRadius: '8px',
-          fontSize: '18px',
+          fontSize: isMobile ? '16px' : '18px',
           fontWeight: 'bold',
-          cursor: loading || !apiToken ? 'not-allowed' : 'pointer'
+          cursor: loading || !apiToken ? 'not-allowed' : 'pointer',
+          WebkitAppearance: 'none',
+          WebkitTapHighlightColor: 'transparent'
         }}
       >
         {loading ? 'ログを取得中...' : 'ログを取得'}
@@ -935,17 +1003,24 @@ export default function Home() {
               {messages}
             </pre>
           </div>
-          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+          <div style={{ 
+            display: 'flex', 
+            gap: '10px', 
+            marginTop: '10px',
+            flexDirection: isMobile ? 'column' : 'row'
+          }}>
             <button
               onClick={copyToClipboard}
               style={{
                 flex: 1,
-                padding: '10px',
+                padding: isMobile ? '12px' : '10px',
                 backgroundColor: '#2563eb',
                 color: 'white',
                 border: 'none',
                 borderRadius: '8px',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                fontSize: '16px',
+                WebkitAppearance: 'none'
               }}
             >
               コピー
@@ -954,12 +1029,14 @@ export default function Home() {
               onClick={downloadAsText}
               style={{
                 flex: 1,
-                padding: '10px',
+                padding: isMobile ? '12px' : '10px',
                 backgroundColor: '#2563eb',
                 color: 'white',
                 border: 'none',
                 borderRadius: '8px',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                fontSize: '16px',
+                WebkitAppearance: 'none'
               }}
             >
               ダウンロード
