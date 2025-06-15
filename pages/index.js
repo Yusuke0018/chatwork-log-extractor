@@ -237,28 +237,52 @@ export default function Home() {
                   alignItems: 'center'
                 }}
               >
-                <span style={{ fontWeight: 'bold', color: '#0284c7' }}>
-                  ⏰ {room.roomName}
+                <span style={{ fontWeight: 'bold', color: '#0284c7', flex: 1 }}>
+                  ⏰ {room.roomName || `ルームID: ${room.roomId}`}
                 </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <span style={{ fontSize: '14px', color: '#64748b' }}>
-                    保存期間:
-                  </span>
-                  <select
-                    value={room.days || 3}
-                    onChange={(e) => updateAutoSaveDays(room.roomId, parseInt(e.target.value))}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span style={{ fontSize: '14px', color: '#64748b' }}>
+                      保存期間:
+                    </span>
+                    <select
+                      value={room.days || 3}
+                      onChange={(e) => updateAutoSaveDays(room.roomId, parseInt(e.target.value))}
+                      style={{
+                        padding: '5px',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '4px',
+                        fontSize: '14px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7].map(day => (
+                        <option key={day} value={day}>{day}日</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    onClick={() => {
+                      let saved = JSON.parse(localStorage.getItem('autoSaveRooms') || '[]');
+                      saved = saved.filter(r => r.roomId !== room.roomId);
+                      localStorage.setItem('autoSaveRooms', JSON.stringify(saved));
+                      setAutoSaveRooms(saved);
+                      setShowSuccess(`${room.roomName}の自動保存を解除しました`);
+                      setTimeout(() => setShowSuccess(false), 3000);
+                    }}
                     style={{
-                      padding: '5px',
-                      border: '1px solid #e5e7eb',
+                      padding: '5px 10px',
+                      backgroundColor: '#ef4444',
+                      color: 'white',
+                      border: 'none',
                       borderRadius: '4px',
-                      fontSize: '14px',
-                      cursor: 'pointer'
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      fontWeight: 'bold'
                     }}
                   >
-                    {[1, 2, 3, 4, 5, 6, 7].map(day => (
-                      <option key={day} value={day}>{day}日</option>
-                    ))}
-                  </select>
+                    解除
+                  </button>
                 </div>
               </div>
             ))}
