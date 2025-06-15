@@ -12,6 +12,7 @@ export default function Home() {
   const [error, setError] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [autoSaveRooms, setAutoSaveRooms] = useState([]);
+  const [autoSaveDays, setAutoSaveDays] = useState(3); // デフォルト3日
   
   useEffect(() => {
     const savedToken = localStorage.getItem('chatworkApiToken');
@@ -98,6 +99,7 @@ export default function Home() {
     const roomData = {
       roomId: selectedRoom,
       roomName: rooms.find(r => r.room_id === selectedRoom)?.name,
+      days: autoSaveDays // 保存期間を追加
     };
     const existingIndex = saved.findIndex(r => r.roomId === selectedRoom);
     if (existingIndex >= 0) {
@@ -109,15 +111,32 @@ export default function Home() {
         return;
       }
       saved.push(roomData);
-      setShowSuccess(`自動保存を【開始】しました（${saved.length}/10）`);
+      setShowSuccess(`自動保存を【開始】しました（${autoSaveDays}日ごと）`);
     }
     localStorage.setItem('autoSaveRooms', JSON.stringify(saved));
     setAutoSaveRooms(saved);
     setTimeout(() => setShowSuccess(false), 3000);
   };
 
+  const updateAutoSaveDays = (roomId, newDays) => {
+    let saved = JSON.parse(localStorage.getItem('autoSaveRooms') || '[]');
+    const index = saved.findIndex(r => r.roomId === roomId);
+    if (index >= 0) {
+      saved[index].days = newDays;
+      localStorage.setItem('autoSaveRooms', JSON.stringify(saved));
+      setAutoSaveRooms(saved);
+      setShowSuccess(`${saved[index].roomName}の保存期間を${newDays}日に変更しました`);
+      setTimeout(() => setShowSuccess(false), 3000);
+    }
+  };
+
   const isAutoSaveEnabled = (roomId) => {
     return autoSaveRooms.some(r => r.roomId === roomId);
+  };
+
+  const getAutoSaveDays = (roomId) => {
+    const room = autoSaveRooms.find(r => r.roomId === roomId);
+    return room ? room.days || 3 : 3;
   };
 
   const copyToClipboard = async () => {
@@ -142,7 +161,7 @@ export default function Home() {
         </p>
       </div>
       
-      {/* 自動保存状況の表示（目立つ位置に移動） */}
+      {/* 自動保存状況の表示 */}
       {autoSaveRooms.length > 0 && (
         <div style={{ 
           backgroundColor: '#f0f9ff', 
@@ -154,25 +173,48 @@ export default function Home() {
           <h3 style={{ margin: '0 0 10px 0', color: '#0284c7', fontSize: '16px' }}>
             🤖 自動保存中のルーム（{autoSaveRooms.length}/10）
           </h3>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {autoSaveRooms.map((room) => (
-              <span 
+              <div 
                 key={room.roomId} 
                 style={{ 
-                  backgroundColor: '#0ea5e9',
-                  color: 'white',
-                  padding: '5px 12px',
-                  borderRadius: '20px',
-                  fontSize: '14px',
-                  fontWeight: 'bold'
+                  backgroundColor: 'white',
+                  border: '1px solid #0ea5e9',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
                 }}
               >
-                ⏰ {room.roomName}
-              </span>
+                <span style={{ fontWeight: 'bold', color: '#0284c7' }}>
+                  ⏰ {room.roomName}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ fontSize: '14px', color: '#64748b' }}>
+                    保存期間:
+                  </span>
+                  <select
+                    value={room.days || 3}
+                    onChange={(e) => updateAutoSaveDays(room.roomId, parseInt(e.target.value))}
+                    style={{
+                      padding: '5px',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7].map(day => (
+                      <option key={day} value={day}>{day}日</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             ))}
           </div>
           <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#64748b' }}>
-            ※3日ごとに自動でログを保存します
+            ※設定した日数ごとに自動でログを保存します
           </p>
         </div>
       )}
@@ -239,6 +281,28 @@ export default function Home() {
             {!selectedRoom ? '選択して' : isAutoSaveEnabled(selectedRoom) ? '🔴 自動OFF' : autoSaveRooms.length >= 10 ? '❌ 上限' : '🟢 自動ON'}
           </button>
         </div>
+        
+        {/* 新規自動保存の期間選択 */}
+        {selectedRoom && !isAutoSaveEnabled(selectedRoom) && autoSaveRooms.length < 10 && (
+          <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '14px' }}>自動保存の期間:</span>
+            <select
+              value={autoSaveDays}
+              onChange={(e) => setAutoSaveDays(parseInt(e.target.value))}
+              style={{
+                padding: '5px 10px',
+                border: '2px solid #e5e7eb',
+                borderRadius: '4px',
+                fontSize: '14px'
+              }}
+            >
+              {[1, 2, 3, 4, 5, 6, 7].map(day => (
+                <option key={day} value={day}>{day}日ごと</option>
+              ))}
+            </select>
+          </div>
+        )}
+        
         {selectedRoom && (
           <p style={{ 
             fontSize: '12px', 
@@ -247,7 +311,7 @@ export default function Home() {
             fontWeight: isAutoSaveEnabled(selectedRoom) ? 'bold' : 'normal'
           }}>
             {isAutoSaveEnabled(selectedRoom) 
-              ? '✅ このルームは自動保存が有効です' 
+              ? `✅ このルームは${getAutoSaveDays(selectedRoom)}日ごとに自動保存されます` 
               : '❌ このルームは自動保存されていません'}
           </p>
         )}
