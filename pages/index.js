@@ -28,6 +28,10 @@ export default function Home() {
     
     loadAutoSaveSettings();
     loadSavedLogs();
+    
+    setTimeout(() => {
+      checkAutoSave();
+    }, 2000);
   }, []);
 
   const loadAutoSaveSettings = () => {
@@ -38,6 +42,70 @@ export default function Home() {
   const loadSavedLogs = () => {
     const logs = JSON.parse(localStorage.getItem('savedLogs') || '[]');
     setSavedLogs(logs);
+  };
+
+  const checkAutoSave = async () => {
+    const saved = JSON.parse(localStorage.getItem('autoSaveRooms') || '[]');
+    const logs = JSON.parse(localStorage.getItem('savedLogs') || '[]');
+    const token = localStorage.getItem('chatworkApiToken');
+    
+    if (!token || saved.length === 0) return;
+    
+    const now = new Date();
+    let autoSaveCount = 0;
+    
+    for (const room of saved.slice(0, 10)) {
+      const lastSave = logs.find(log => log.roomId === room.roomId && log.isAutoSave);
+      const lastSaveDate = lastSave ? new Date(lastSave.savedAt) : null;
+      
+      if (!lastSaveDate || (now - lastSaveDate) > 3 * 24 * 60 * 60 * 1000) {
+        const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+        
+        try {
+          const response = await fetch('/api/chatwork/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              apiToken: token,
+              roomId: room.roomId,
+              startDate: threeDaysAgo.toISOString().split('T')[0],
+              endDate: now.toISOString().split('T')[0],
+            }),
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            
+            const logEntry = {
+              id: `auto_${room.roomId}_${Date.now()}`,
+              roomName: room.roomName,
+              roomId: room.roomId,
+              content: data.messages,
+              count: data.count,
+              startDate: threeDaysAgo.toISOString().split('T')[0],
+              endDate: now.toISOString().split('T')[0],
+              savedAt: now.toISOString(),
+              isAutoSave: true
+            };
+            
+            logs.unshift(logEntry);
+            autoSaveCount++;
+          }
+        } catch (err) {
+          console.error(`自動保存エラー (${room.roomName}):`, err);
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    if (autoSaveCount > 0) {
+      const trimmedLogs = logs.slice(0, 50);
+      localStorage.setItem('savedLogs', JSON.stringify(trimmedLogs));
+      loadSavedLogs();
+      setShowSuccess(`${autoSaveCount}件の自動保存を実行しました`);
+      setTimeout(() => setShowSuccess(false), 3000);
+    }
   };
 
   const loadRooms = async (token) => {
@@ -101,7 +169,6 @@ export default function Home() {
         setError('※最新100件のみ表示されています（Chatwork APIの制限）');
       }
       
-      // ログを保存
       const roomName = rooms.find(r => r.room_id === selectedRoom)?.name || 'Unknown';
       const newLog = {
         id: Date.now().toString(),
@@ -453,33 +520,3 @@ export default function Home() {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                  <strong>{log.roomName}</strong>
-                  <span style={{ fontSize: '14px', color: '#6b7280' }}>{log.count}件</span>
-                </div>
-                <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                  {log.startDate} 〜 {log.endDate}
-                  {log.isAutoSave && ' 🤖自動'}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      
-      {showSuccess && (
-        <div style={{
-          position: 'fixed',
-          top: '20px',
-          right: '20px',
-          backgroundColor: '#10b981',
-          color: 'white',
-          padding: '15px 20px',
-          borderRadius: '8px',
-          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-        }}>
-          {showSuccess}
-        </div>
-      )}
-    </div>
-  );
-}
