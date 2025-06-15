@@ -188,7 +188,7 @@ export default function Home() {
         isAutoSave: false
       };
       
-      // (FIXED) Use immutable update for savedLogs as well for consistency
+      // Use immutable update for savedLogs as well for consistency
       const currentLogs = JSON.parse(localStorage.getItem('savedLogs') || '[]');
       const newLogs = [newLog, ...currentLogs];
       const trimmedLogs = newLogs.slice(0, 50);
@@ -202,29 +202,21 @@ export default function Home() {
     setLoading(false);
   };
 
-  // --- (FIXED v2) Toggling Auto-Save Setting using Functional Update ---
   const toggleAutoSave = () => {
     if (!selectedRoom) {
       setError('ルームを選択してください');
       return;
     }
-
-    // Use the functional update form of setState (`set*(prevState => newState)`).
-    // This guarantees that we are always working with the most up-to-date state,
-    // avoiding potential issues with stale state during rapid updates.
     setAutoSaveRooms(currentAutoSaveRooms => {
       const isExisting = currentAutoSaveRooms.some(r => r.roomId.toString() === selectedRoom);
       let newAutoSaveRooms;
 
       if (isExisting) {
-        // IMMUTABLE DELETE: Create a new array excluding the selected room.
         newAutoSaveRooms = currentAutoSaveRooms.filter(r => r.roomId.toString() !== selectedRoom);
         setShowSuccess('自動保存を解除しました');
       } else {
-        // ADD: First, check the limit.
         if (currentAutoSaveRooms.length >= 10) {
           setError('自動保存は最大10個までです');
-          // If limit is reached, return the original state unchanged.
           return currentAutoSaveRooms; 
         }
         
@@ -233,19 +225,13 @@ export default function Home() {
           roomName: rooms.find(r => r.room_id.toString() === selectedRoom)?.name || 'Unknown Room',
         };
         
-        // IMMUTABLE ADD: Create a new array with the new room data.
         newAutoSaveRooms = [...currentAutoSaveRooms, roomData];
         setShowSuccess(`自動保存を設定しました（${newAutoSaveRooms.length}/10）`);
       }
 
-      // After calculating the new state, update local storage to keep it in sync.
       localStorage.setItem('autoSaveRooms', JSON.stringify(newAutoSaveRooms));
-      
-      // Finally, return the new state. React will use this to update the component.
       return newAutoSaveRooms;
     });
-
-    // This part remains outside the updater function.
     setTimeout(() => setShowSuccess(false), 2000);
   };
 
@@ -269,7 +255,6 @@ export default function Home() {
   const copyToClipboard = async () => {
     if (!messages) return;
     try {
-      // Use execCommand as a fallback for iframe environments where navigator.clipboard might be restricted.
       const textArea = document.createElement("textarea");
       textArea.value = messages;
       document.body.appendChild(textArea);
@@ -515,20 +500,15 @@ export default function Home() {
           padding: '15px 25px',
           borderRadius: '8px',
           boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-          zIndex: 1000,
-          animation: 'fadeInOut 2.5s ease-in-out'
+          zIndex: 1000
         }}>
           {showSuccess}
         </div>
       )}
-      <style jsx global>{`
-        @keyframes fadeInOut {
-          0% { opacity: 0; transform: translate(-50%, -20px); }
-          15% { opacity: 1; transform: translate(-50%, 0); }
-          85% { opacity: 1; transform: translate(-50%, 0); }
-          100% { opacity: 0; transform: translate(-50%, -20px); }
-        }
-      `}</style>
+      {/* The <style jsx global> tag has been removed to prevent build errors.
+        If the build succeeds with this change, the animation can be re-added
+        using a standard global CSS file (e.g., styles/globals.css).
+      */}
     </div>
   );
 }
