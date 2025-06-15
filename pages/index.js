@@ -52,7 +52,8 @@ export default function ChatworkLogExtractor() {
 
   const loadSavedLogs = () => {
     const logs = JSON.parse(localStorage.getItem('savedLogs') || '[]');
-    setSavedLogs(logs.slice(0, 20)); // 最新20件のみ表示
+    // 全てのログを表示（最新50件まで）
+    setSavedLogs(logs);
   };
 
   const loadRooms = async () => {
@@ -215,10 +216,11 @@ export default function ChatworkLogExtractor() {
     const logs = JSON.parse(localStorage.getItem('savedLogs') || '[]');
     const token = localStorage.getItem('chatworkApiToken');
     
-    if (!token) return;
+    if (!token || saved.length === 0) return;
 
     const now = new Date();
     let updated = false;
+    let autoSaveCount = 0;
 
     // 最大10個まで処理
     for (const room of saved.slice(0, 10)) {
@@ -243,9 +245,9 @@ export default function ChatworkLogExtractor() {
           if (response.ok) {
             const data = await response.json();
             
-            // ログを保存
+            // ログを保存（各ルームごとに個別のIDで保存）
             const logEntry = {
-              id: Date.now() + Math.random(),
+              id: `${room.roomId}_${Date.now()}`,
               roomName: room.roomName,
               roomId: room.roomId,
               content: data.messages,
@@ -257,6 +259,7 @@ export default function ChatworkLogExtractor() {
             };
             
             logs.unshift(logEntry);
+            autoSaveCount++;
             
             // 次回保存日を更新
             room.lastSaved = now.toISOString();
@@ -264,8 +267,11 @@ export default function ChatworkLogExtractor() {
             updated = true;
           }
         } catch (err) {
-          console.error('自動保存エラー:', err);
+          console.error(`自動保存エラー (${room.roomName}):`, err);
         }
+        
+        // API制限対策で少し待つ
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
@@ -274,9 +280,21 @@ export default function ChatworkLogExtractor() {
       const trimmedLogs = logs.slice(0, 50);
       localStorage.setItem('savedLogs', JSON.stringify(trimmedLogs));
       localStorage.setItem('autoSaveRooms', JSON.stringify(saved));
+      
+      // 画面更新（現在の状態を保持）
+      const currentMessages = messages;
+      const currentStartDate = startDate;
+      const currentEndDate = endDate;
+      
       loadSavedLogs();
       loadAutoSaveSettings();
-      setShowSuccess('自動保存を実行しました');
+      
+      // 状態を復元
+      setMessages(currentMessages);
+      setStartDate(currentStartDate);
+      setEndDate(currentEndDate);
+      
+      setShowSuccess(`${autoSaveCount}件の自動保存を実行しました`);
       setTimeout(() => setShowSuccess(false), 3000);
     }
   };
@@ -537,12 +555,12 @@ export default function ChatworkLogExtractor() {
           {savedLogs.length > 0 && (
             <div style={{ marginTop: '2rem', paddingTop: '2rem', borderTop: '2px solid #e5e7eb' }}>
               <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem' }}>
-                保存履歴 {savedLogs.filter(log => log.isAutoSave).length > 0 && `(自動保存: ${savedLogs.filter(log => log.isAutoSave).length}件)`}
+                保存履歴 ({savedLogs.length}件) {savedLogs.filter(log => log.isAutoSave).length > 0 && `| 自動保存: ${savedLogs.filter(log => log.isAutoSave).length}件`}
               </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '300px', overflow: 'auto' }}>
-                {savedLogs.map((log) => (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '400px', overflow: 'auto', padding: '0.25rem' }}>
+                {savedLogs.map((log, index) => (
                   <div
-                    key={log.id}
+                    key={log.id || index}
                     onClick={() => viewSavedLog(log)}
                     style={{
                       padding: '0.75rem',
@@ -550,16 +568,22 @@ export default function ChatworkLogExtractor() {
                       border: '1px solid #e5e7eb',
                       borderRadius: '0.5rem',
                       cursor: 'pointer',
-                      fontSize: '0.875rem'
+                      fontSize: '0.875rem',
+                      transition: 'all 0.2s',
                     }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = log.isAutoSave ? '#e0f2fe' : '#f3f4f6'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = log.isAutoSave ? '#f0f9ff' : '#f9fafb'}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                      <strong>{log.roomName}</strong>
-                      <span style={{ color: '#6b7280' }}>{log.count}件</span>
+                      <strong>{log.roomName || 'Unknown'}</strong>
+                      <span style={{ color: '#6b7280' }}>{log.count || 0}件</span>
                     </div>
                     <div style={{ color: '#6b7280', fontSize: '0.75rem' }}>
                       {log.startDate} 〜 {log.endDate}
                       {log.isAutoSave && ' 🤖自動'}
+                    </div>
+                    <div style={{ color: '#9ca3af', fontSize: '0.7rem', marginTop: '0.25rem' }}>
+                      保存日時: {new Date(log.savedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' })}
                     </div>
                   </div>
                 ))}
@@ -581,7 +605,5 @@ export default function ChatworkLogExtractor() {
         }
       `}</style>
     </div>
-  );
-}
   );
 }
