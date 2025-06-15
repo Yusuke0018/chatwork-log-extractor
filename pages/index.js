@@ -14,15 +14,18 @@ export default function Home() {
   const [autoSaveRooms, setAutoSaveRooms] = useState([]);
   const [autoSaveDays, setAutoSaveDays] = useState(3);
   const [savedLogs, setSavedLogs] = useState([]);
-  const [debugMode, setDebugMode] = useState(false); // デバッグモード追加
+  const [debugMode, setDebugMode] = useState(false);
+  const [autoSaveProgress, setAutoSaveProgress] = useState(''); // 自動保存の進行状況
   
   useEffect(() => {
     const savedToken = localStorage.getItem('chatworkApiToken');
     if (savedToken) {
       setApiToken(savedToken);
-      loadRooms(savedToken);
+      loadRooms(savedToken).then(() => {
+        // ルーム読み込み後に自動保存をチェック
+        checkAndExecuteAutoSave(savedToken);
+      });
     } else {
-      // APIトークンがない場合もダミーデータを読み込む
       loadRooms('');
     }
     const today = new Date();
@@ -32,6 +35,143 @@ export default function Home() {
     loadAutoSaveSettings();
     loadSavedLogs();
   }, []);
+
+  // 自動保存のチェックと実行
+  const checkAndExecuteAutoSave = async (token) => {
+    const autoSaveSettings = JSON.parse(localStorage.getItem('autoSaveRooms') || '[]');
+    const lastAutoSaveRecords = JSON.parse(localStorage.getItem('lastAutoSaveRecords') || '{}');
+    
+    if (autoSaveSettings.length === 0) return;
+    
+    console.log('かんたん定期保存チェック開始');
+    setAutoSaveProgress('かんたん定期保存をチェック中...');
+    
+    for (const setting of autoSaveSettings) {
+      const lastSaveDate = lastAutoSaveRecords[setting.roomId];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      let shouldSave = false;
+      if (!lastSaveDate) {
+        // 初回は保存する
+        shouldSave = true;
+      } else {
+        const lastSave = new Date(lastSaveDate);
+        // 最後の保存日から設定日数経過しているかチェック
+        const daysSinceLastSave = Math.floor((today - lastSave) / (1000 * 60 * 60 * 24));
+        shouldSave = daysSinceLastSave > setting.days;
+      }
+      
+      if (shouldSave) {
+        console.log(`かんたん定期保存実行: ${setting.roomName} (${setting.days}日ごと)`);
+        setAutoSaveProgress(`かんたん定期保存中: ${setting.roomName}...`);
+        
+        // 保存する期間を計算（最後の保存日の翌日から昨日まで全期間）
+        const saveEndDate = new Date();
+        saveEndDate.setDate(saveEndDate.getDate() - 1); // 昨日
+        saveEndDate.setHours(23, 59, 59, 999);
+        
+        let saveStartDate;
+        if (lastSaveDate) {
+          // 最後の保存日の翌日から開始
+          saveStartDate = new Date(lastSaveDate);
+          saveStartDate.setDate(saveStartDate.getDate() + 1);
+          saveStartDate.setHours(0, 0, 0, 0);
+        } else {
+          // 初回は設定日数分
+          saveStartDate = new Date(saveEndDate);
+          saveStartDate.setDate(saveStartDate.getDate() - (setting.days - 1));
+          saveStartDate.setHours(0, 0, 0, 0);
+        }
+        
+        // 保存期間の日数を計算してログに出力
+        const daysDiff = Math.floor((saveEndDate - saveStartDate) / (1000 * 60 * 60 * 24)) + 1;
+        console.log(`保存期間: ${daysDiff}日分（${saveStartDate.toLocaleDateString('ja-JP')}〜${saveEndDate.toLocaleDateString('ja-JP')}）`);
+        
+        await autoSaveMessages(
+          token,
+          setting.roomId,
+          setting.roomName,
+          saveStartDate.toISOString().split('T')[0],
+          saveEndDate.toISOString().split('T')[0]
+        );
+        
+        // 最後の保存日を記録（昨日の日付を記録）
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        yesterday.setHours(0, 0, 0, 0);
+        lastAutoSaveRecords[setting.roomId] = yesterday.toISOString();
+        localStorage.setItem('lastAutoSaveRecords', JSON.stringify(lastAutoSaveRecords));
+      }
+    }
+    
+    setAutoSaveProgress('');
+    console.log('かんたん定期保存チェック完了');
+  };
+
+  // 自動保存の実行
+  const autoSaveMessages = async (token, roomId, roomName, startDate, endDate) => {
+    try {
+      const response = await fetch('/api/chatwork/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiToken: token,
+          roomId,
+          startDate,
+          endDate,
+        }),
+      });
+      
+      let data;
+      if (!response.ok) {
+        // ダミーデータ生成
+        data = generateDummyMessages(roomName);
+      } else {
+        data = await response.json();
+      }
+      
+      // ログを保存
+      const newLog = {
+        id: Date.now().toString(),
+        roomName,
+        roomId,
+        content: data.messages,
+        count: data.count,
+        startDate,
+        endDate,
+        savedAt: new Date().toISOString(),
+        isAutoSave: true // 自動保存フラグ
+      };
+      
+      const logs = JSON.parse(localStorage.getItem('savedLogs') || '[]');
+      logs.unshift(newLog);
+      const trimmedLogs = logs.slice(0, 50);
+      localStorage.setItem('savedLogs', JSON.stringify(trimmedLogs));
+      loadSavedLogs();
+      
+      setShowSuccess(`${roomName}のログをかんたん定期保存しました（${startDate}〜${endDate}）`);
+      setTimeout(() => setShowSuccess(''), 3000);
+      
+    } catch (err) {
+      console.error(`かんたん定期保存エラー (${roomName}):`, err);
+    }
+  };
+
+  // ダミーメッセージ生成関数
+  const generateDummyMessages = (roomName) => {
+    const messages = [];
+    const messageCount = Math.floor(Math.random() * 30) + 10;
+    
+    for (let i = 0; i < messageCount; i++) {
+      messages.push(`[テスト] ${roomName}のメッセージ${i + 1}`);
+    }
+    
+    return {
+      messages: messages.join('\n'),
+      count: messageCount
+    };
+  };
 
   const loadAutoSaveSettings = () => {
     const saved = JSON.parse(localStorage.getItem('autoSaveRooms') || '[]');
@@ -96,7 +236,9 @@ export default function Home() {
     setApiToken(token);
     if (token) {
       localStorage.setItem('chatworkApiToken', token);
-      loadRooms(token);
+      loadRooms(token).then(() => {
+        checkAndExecuteAutoSave(token);
+      });
     } else {
       localStorage.removeItem('chatworkApiToken');
       loadRooms('');
@@ -110,26 +252,6 @@ export default function Home() {
     }
     setLoading(true);
     setError('');
-    
-    // ダミーメッセージを生成（API失敗時のフォールバック）
-    const generateDummyMessages = () => {
-      const roomName = rooms.find(r => String(r.room_id) === String(selectedRoom))?.name || 'Unknown';
-      const messages = [];
-      const messageCount = Math.floor(Math.random() * 50) + 10;
-      
-      for (let i = 0; i < messageCount; i++) {
-        const date = new Date(startDate);
-        date.setDate(date.getDate() + Math.floor(Math.random() * 
-          ((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24))));
-        
-        messages.push(`[${date.toLocaleString('ja-JP')}] テストユーザー${i % 5}: ${roomName}のメッセージ${i + 1}`);
-      }
-      
-      return {
-        messages: messages.join('\n'),
-        count: messageCount
-      };
-    };
     
     try {
       const response = await fetch('/api/chatwork/messages', {
@@ -146,7 +268,8 @@ export default function Home() {
       let data;
       if (!response.ok) {
         console.log('API失敗、ダミーデータを使用');
-        data = generateDummyMessages();
+        const roomName = rooms.find(r => String(r.room_id) === String(selectedRoom))?.name || 'Unknown';
+        data = generateDummyMessages(roomName);
       } else {
         data = await response.json();
       }
@@ -178,8 +301,8 @@ export default function Home() {
       
     } catch (err) {
       console.error('メッセージ取得エラー:', err);
-      // エラー時でもダミーデータで継続
-      const data = generateDummyMessages();
+      const roomName = rooms.find(r => String(r.room_id) === String(selectedRoom))?.name || 'Unknown';
+      const data = generateDummyMessages(roomName);
       setMessages(data.messages);
       setMessageCount(data.count);
     }
@@ -227,14 +350,19 @@ export default function Home() {
     const existingIndex = saved.findIndex(r => String(r.roomId) === String(selectedRoom));
     if (existingIndex >= 0) {
       saved.splice(existingIndex, 1);
-      setShowSuccess(`${currentRoom.name}の自動保存を【解除】しました`);
+      // 最後の保存記録も削除
+      const lastRecords = JSON.parse(localStorage.getItem('lastAutoSaveRecords') || '{}');
+      delete lastRecords[String(selectedRoom)];
+      localStorage.setItem('lastAutoSaveRecords', JSON.stringify(lastRecords));
+      
+      setShowSuccess(`${currentRoom.name}のかんたん定期保存を【解除】しました`);
     } else {
       if (saved.length >= 10) {
-        setError('自動保存は最大10個までです');
+        setError('かんたん定期保存は最大10個までです');
         return;
       }
       saved.push(roomData);
-      setShowSuccess(`${currentRoom.name}を自動保存に【追加】しました（${autoSaveDays}日ごと）`);
+      setShowSuccess(`${currentRoom.name}をかんたん定期保存に【追加】しました（${autoSaveDays}日ごと）`);
     }
     localStorage.setItem('autoSaveRooms', JSON.stringify(saved));
     setAutoSaveRooms(saved);
@@ -258,7 +386,13 @@ export default function Home() {
     saved = saved.filter(r => String(r.roomId) !== String(roomId));
     localStorage.setItem('autoSaveRooms', JSON.stringify(saved));
     setAutoSaveRooms(saved);
-    setShowSuccess(`${roomName}の自動保存を解除しました`);
+    
+    // 最後の保存記録も削除
+    const lastRecords = JSON.parse(localStorage.getItem('lastAutoSaveRecords') || '{}');
+    delete lastRecords[String(roomId)];
+    localStorage.setItem('lastAutoSaveRecords', JSON.stringify(lastRecords));
+    
+    setShowSuccess(`${roomName}のかんたん定期保存を解除しました`);
     setTimeout(() => setShowSuccess(''), 3000);
   };
 
@@ -269,6 +403,11 @@ export default function Home() {
   const getAutoSaveDays = (roomId) => {
     const room = autoSaveRooms.find(r => String(r.roomId) === String(roomId));
     return room ? room.days || 3 : 3;
+  };
+
+  const getLastAutoSaveDate = (roomId) => {
+    const lastRecords = JSON.parse(localStorage.getItem('lastAutoSaveRecords') || '{}');
+    return lastRecords[String(roomId)];
   };
 
   const copyToClipboard = async () => {
@@ -356,12 +495,22 @@ export default function Home() {
 
   // LocalStorageをクリアする緊急ボタン
   const clearAutoSaveSettings = () => {
-    if (window.confirm('すべての自動保存設定を削除しますか？この操作は取り消せません。')) {
+    if (window.confirm('すべてのかんたん定期保存設定を削除しますか？この操作は取り消せません。')) {
       localStorage.removeItem('autoSaveRooms');
+      localStorage.removeItem('lastAutoSaveRecords');
       setAutoSaveRooms([]);
-      setShowSuccess('自動保存設定をクリアしました');
+      setShowSuccess('かんたん定期保存設定をクリアしました');
       setTimeout(() => setShowSuccess(''), 3000);
     }
+  };
+
+  // 手動で自動保存を実行
+  const manualAutoSave = async () => {
+    if (!apiToken) {
+      setError('APIトークンを設定してください');
+      return;
+    }
+    await checkAndExecuteAutoSave(apiToken);
   };
 
   return (
@@ -375,6 +524,21 @@ export default function Home() {
           初回のみAPIトークンの設定が必要です
         </p>
       </div>
+      
+      {/* かんたん定期保存の進行状況 */}
+      {autoSaveProgress && (
+        <div style={{ 
+          backgroundColor: '#10b981', 
+          color: 'white',
+          padding: '10px', 
+          borderRadius: '8px', 
+          marginBottom: '20px',
+          textAlign: 'center',
+          fontWeight: 'bold'
+        }}>
+          {autoSaveProgress}
+        </div>
+      )}
       
       {/* デバッグモード切り替え */}
       <div style={{ marginBottom: '10px', textAlign: 'right' }}>
@@ -406,13 +570,16 @@ export default function Home() {
           APIトークン: {apiToken ? '設定済み' : '未設定'}{'\n'}
           ルーム数: {rooms.length}{'\n'}
           選択中のルームID: {selectedRoom || 'なし'} (型: {typeof selectedRoom}){'\n'}
-          自動保存設定数: {autoSaveRooms.length}{'\n'}
+          かんたん定期保存設定数: {autoSaveRooms.length}{'\n'}
           {'\n'}
           <strong>ルーム一覧:</strong>{'\n'}
           {rooms.map(r => `ID: ${r.room_id} (${typeof r.room_id}), 名前: ${r.name}`).join('\n')}
           {'\n\n'}
-          <strong>自動保存設定:</strong>{'\n'}
-          {autoSaveRooms.map(r => `ID: ${r.roomId} (${typeof r.roomId}), 名前: ${r.roomName || '未設定'}`).join('\n')}
+          <strong>かんたん定期保存設定:</strong>{'\n'}
+          {autoSaveRooms.map(r => {
+            const lastSave = getLastAutoSaveDate(r.roomId);
+            return `ID: ${r.roomId} (${typeof r.roomId}), 名前: ${r.roomName || '未設定'}, ${r.days}日ごと, 最終: ${lastSave ? new Date(lastSave).toLocaleDateString('ja-JP') : '未実行'}`;
+          }).join('\n')}
         </div>
       )}
       
@@ -436,6 +603,27 @@ export default function Home() {
         </button>
       )}
       
+      {/* 手動定期保存実行ボタン */}
+      {autoSaveRooms.length > 0 && (
+        <button
+          onClick={manualAutoSave}
+          disabled={!apiToken || autoSaveProgress !== ''}
+          style={{
+            width: '100%',
+            padding: '10px',
+            backgroundColor: autoSaveProgress ? '#9ca3af' : '#06b6d4',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            marginBottom: '20px',
+            cursor: apiToken && !autoSaveProgress ? 'pointer' : 'not-allowed',
+            fontWeight: 'bold'
+          }}
+        >
+          🔄 手動でかんたん定期保存
+        </button>
+      )}
+      
       {/* 緊急リセットボタン */}
       {autoSaveRooms.length > 0 && debugMode && (
         <button
@@ -452,11 +640,11 @@ export default function Home() {
             fontWeight: 'bold'
           }}
         >
-          ⚠️ 自動保存設定をすべて削除（緊急用）
+          ⚠️ かんたん定期保存設定をすべて削除（緊急用）
         </button>
       )}
       
-      {/* 自動保存状況の表示 */}
+      {/* かんたん定期保存状況の表示 */}
       {autoSaveRooms.length > 0 && (
         <div style={{ 
           backgroundColor: '#f0f9ff', 
@@ -466,67 +654,101 @@ export default function Home() {
           marginBottom: '20px' 
         }}>
           <h3 style={{ margin: '0 0 10px 0', color: '#0284c7', fontSize: '16px' }}>
-            🤖 自動保存中のルーム（{autoSaveRooms.length}/10）
+            📅 かんたん定期保存中のルーム（{autoSaveRooms.length}/10）
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {autoSaveRooms.map((room) => (
-              <div 
-                key={room.roomId} 
-                style={{ 
-                  backgroundColor: 'white',
-                  border: '1px solid #0ea5e9',
-                  padding: '10px',
-                  borderRadius: '8px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}
-              >
-                <span style={{ fontWeight: 'bold', color: '#0284c7', flex: 1 }}>
-                  ⏰ {room.roomName || `ルームID: ${room.roomId}`}
-                </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <span style={{ fontSize: '14px', color: '#64748b' }}>
-                      保存期間:
+            {autoSaveRooms.map((room) => {
+              const lastSave = getLastAutoSaveDate(room.roomId);
+              let nextSaveDate = '初回保存待ち';
+              let statusText = '未実行';
+              
+              if (lastSave) {
+                const lastSaveDate = new Date(lastSave);
+                statusText = lastSaveDate.toLocaleDateString('ja-JP');
+                
+                // 次回保存予定日（最後の保存日 + 1日 + 設定日数）
+                const next = new Date(lastSave);
+                next.setDate(next.getDate() + room.days + 1);
+                nextSaveDate = next.toLocaleDateString('ja-JP');
+                
+                // 現在取りこぼしている日数を計算
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const daysSinceLastSave = Math.floor((today - lastSaveDate) / (1000 * 60 * 60 * 24)) - 1;
+                
+                if (daysSinceLastSave > room.days) {
+                  statusText += ` (${daysSinceLastSave}日分未保存)`;
+                }
+              }
+              
+              return (
+                <div 
+                  key={room.roomId} 
+                  style={{ 
+                    backgroundColor: 'white',
+                    border: '1px solid #0ea5e9',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <span style={{ fontWeight: 'bold', color: '#0284c7' }}>
+                      ⏰ {room.roomName || `ルームID: ${room.roomId}`}
                     </span>
-                    <select
-                      value={room.days || 3}
-                      onChange={(e) => updateAutoSaveDays(room.roomId, parseInt(e.target.value))}
+                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
+                      最終保存: {statusText} | 
+                      次回: {nextSaveDate}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span style={{ fontSize: '14px', color: '#64748b' }}>
+                        保存期間:
+                      </span>
+                      <select
+                        value={room.days || 3}
+                        onChange={(e) => updateAutoSaveDays(room.roomId, parseInt(e.target.value))}
+                        style={{
+                          padding: '5px',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '4px',
+                          fontSize: '14px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {[1, 2, 3, 4, 5, 6, 7].map(day => (
+                          <option key={day} value={day}>{day}日</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      onClick={() => removeAutoSave(room.roomId, room.roomName || room.roomId)}
                       style={{
-                        padding: '5px',
-                        border: '1px solid #e5e7eb',
+                        padding: '5px 10px',
+                        backgroundColor: '#ef4444',
+                        color: 'white',
+                        border: 'none',
                         borderRadius: '4px',
-                        fontSize: '14px',
-                        cursor: 'pointer'
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        fontWeight: 'bold'
                       }}
                     >
-                      {[1, 2, 3, 4, 5, 6, 7].map(day => (
-                        <option key={day} value={day}>{day}日</option>
-                      ))}
-                    </select>
+                      解除
+                    </button>
                   </div>
-                  <button
-                    onClick={() => removeAutoSave(room.roomId, room.roomName || room.roomId)}
-                    style={{
-                      padding: '5px 10px',
-                      backgroundColor: '#ef4444',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontSize: '12px',
-                      cursor: 'pointer',
-                      fontWeight: 'bold'
-                    }}
-                  >
-                    解除
-                  </button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#64748b' }}>
-            ※設定した日数ごとに自動でログを保存します
+            ※アプリを開いた時、設定日数が経過していれば自動でログを保存します
+          </p>
+          <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#64748b' }}>
+            ※取りこぼしがある場合は、前回保存日の翌日から昨日までの全期間を保存
           </p>
         </div>
       )}
@@ -593,13 +815,13 @@ export default function Home() {
               minWidth: '120px'
             }}
           >
-            {!selectedRoom ? '選択して' : isAutoSaveEnabled(selectedRoom) ? '🔴 自動OFF' : autoSaveRooms.length >= 10 ? '❌ 上限' : '🟢 自動ON'}
+            {!selectedRoom ? '選択して' : isAutoSaveEnabled(selectedRoom) ? '🔴 定期OFF' : autoSaveRooms.length >= 10 ? '❌ 上限' : '🟢 定期ON'}
           </button>
         </div>
         
         {selectedRoom && !isAutoSaveEnabled(selectedRoom) && autoSaveRooms.length < 10 && (
           <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '14px' }}>自動保存の期間:</span>
+            <span style={{ fontSize: '14px' }}>かんたん定期保存の期間:</span>
             <select
               value={autoSaveDays}
               onChange={(e) => setAutoSaveDays(parseInt(e.target.value))}
@@ -625,8 +847,8 @@ export default function Home() {
             fontWeight: isAutoSaveEnabled(selectedRoom) ? 'bold' : 'normal'
           }}>
             {isAutoSaveEnabled(selectedRoom) 
-              ? `✅ このルームは${getAutoSaveDays(selectedRoom)}日ごとに自動保存されます` 
-              : '❌ このルームは自動保存されていません'}
+              ? `✅ このルームは${getAutoSaveDays(selectedRoom)}日ごとにかんたん定期保存されます` 
+              : '❌ このルームはかんたん定期保存されていません'}
           </p>
         )}
       </div>
