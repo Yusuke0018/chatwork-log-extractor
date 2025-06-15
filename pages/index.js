@@ -10,7 +10,7 @@ export default function Home() {
   const [messageCount, setMessageCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showSuccess, setShowSuccess] = useState(false);
+  const [showSuccess, setShowSuccess] = useState('');
   const [autoSaveRooms, setAutoSaveRooms] = useState([]);
   const [autoSaveDays, setAutoSaveDays] = useState(3);
   const [savedLogs, setSavedLogs] = useState([]);
@@ -20,6 +20,9 @@ export default function Home() {
     if (savedToken) {
       setApiToken(savedToken);
       loadRooms(savedToken);
+    } else {
+      // APIトークンがない場合もダミーデータを読み込む
+      loadRooms('');
     }
     const today = new Date();
     const threeDaysAgo = new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000);
@@ -41,22 +44,29 @@ export default function Home() {
 
   const loadRooms = async (token) => {
     try {
-      const response = await fetch('/api/chatwork/rooms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiToken: token }),
-      });
-      if (!response.ok) throw new Error('Failed');
-      const data = await response.json();
-      setRooms(data);
+      if (token) {
+        const response = await fetch('/api/chatwork/rooms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiToken: token }),
+        });
+        if (!response.ok) throw new Error('Failed');
+        const data = await response.json();
+        setRooms(data);
+      } else {
+        // トークンがない場合は最初からダミーデータを設定
+        throw new Error('No token');
+      }
     } catch (err) {
-      setRooms([
+      // ダミーデータを常に設定
+      const dummyRooms = [
         { room_id: '12345', name: '全体ミーティング' },
         { room_id: '12346', name: '経営会議' },
         { room_id: '12347', name: 'スタッフルーム' },
         { room_id: '12348', name: '開発チーム' },
         { room_id: '12349', name: '営業チーム' },
-      ]);
+      ];
+      setRooms(dummyRooms);
     }
   };
 
@@ -66,6 +76,9 @@ export default function Home() {
     if (token) {
       localStorage.setItem('chatworkApiToken', token);
       loadRooms(token);
+    } else {
+      // トークンが削除された場合もダミーデータを読み込む
+      loadRooms('');
     }
   };
 
@@ -125,7 +138,7 @@ export default function Home() {
     
     const currentRoom = rooms.find(r => r.room_id === selectedRoom);
     if (!currentRoom) {
-      setError('ルーム情報が見つかりません');
+      setError('ルーム情報が見つかりません。APIトークンを確認してください。');
       return;
     }
     
@@ -150,7 +163,7 @@ export default function Home() {
     }
     localStorage.setItem('autoSaveRooms', JSON.stringify(saved));
     setAutoSaveRooms(saved);
-    setTimeout(() => setShowSuccess(false), 3000);
+    setTimeout(() => setShowSuccess(''), 3000);
   };
 
   const updateAutoSaveDays = (roomId, newDays) => {
@@ -161,7 +174,7 @@ export default function Home() {
       localStorage.setItem('autoSaveRooms', JSON.stringify(saved));
       setAutoSaveRooms(saved);
       setShowSuccess(`${saved[index].roomName}の保存期間を${newDays}日に変更しました`);
-      setTimeout(() => setShowSuccess(false), 3000);
+      setTimeout(() => setShowSuccess(''), 3000);
     }
   };
 
@@ -171,7 +184,7 @@ export default function Home() {
     localStorage.setItem('autoSaveRooms', JSON.stringify(saved));
     setAutoSaveRooms(saved);
     setShowSuccess(`${roomName}の自動保存を解除しました`);
-    setTimeout(() => setShowSuccess(false), 3000);
+    setTimeout(() => setShowSuccess(''), 3000);
   };
 
   const isAutoSaveEnabled = (roomId) => {
@@ -187,7 +200,7 @@ export default function Home() {
     try {
       await navigator.clipboard.writeText(messages);
       setShowSuccess('コピーしました！');
-      setTimeout(() => setShowSuccess(false), 2000);
+      setTimeout(() => setShowSuccess(''), 2000);
     } catch (err) {
       setError('コピーに失敗しました');
     }
@@ -216,18 +229,52 @@ export default function Home() {
   };
 
   const fixRoomNames = () => {
+    if (rooms.length === 0) {
+      setError('ルーム情報が読み込まれていません。APIトークンを設定してください。');
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+
     let saved = JSON.parse(localStorage.getItem('autoSaveRooms') || '[]');
+    let updatedCount = 0;
+    let notFoundRooms = [];
+    
     saved = saved.map(savedRoom => {
-      const room = rooms.find(r => r.room_id === savedRoom.roomId);
+      // 文字列と数値の両方でマッチングを試みる
+      const room = rooms.find(r => 
+        r.room_id === savedRoom.roomId || 
+        r.room_id === String(savedRoom.roomId) ||
+        String(r.room_id) === String(savedRoom.roomId)
+      );
+      
       if (room) {
         savedRoom.roomName = room.name;
+        updatedCount++;
+      } else {
+        notFoundRooms.push(savedRoom.roomId);
       }
       return savedRoom;
     });
+    
     localStorage.setItem('autoSaveRooms', JSON.stringify(saved));
     setAutoSaveRooms(saved);
-    setShowSuccess('ルーム名を更新しました');
-    setTimeout(() => setShowSuccess(false), 3000);
+    
+    if (notFoundRooms.length > 0) {
+      setError(`一部のルームが見つかりません: ${notFoundRooms.join(', ')}`);
+      setTimeout(() => setError(''), 5000);
+    } else if (updatedCount > 0) {
+      setShowSuccess(`${updatedCount}件のルーム名を更新しました`);
+      setTimeout(() => setShowSuccess(''), 3000);
+    } else {
+      setShowSuccess('更新するルームがありませんでした');
+      setTimeout(() => setShowSuccess(''), 3000);
+    }
+  };
+
+  // ルーム名修正ボタンを表示するかどうかの判定を改善
+  const shouldShowFixButton = () => {
+    return autoSaveRooms.length > 0 && 
+           autoSaveRooms.some(r => !r.roomName || r.roomName === 'Unknown');
   };
 
   return (
@@ -243,7 +290,7 @@ export default function Home() {
       </div>
       
       {/* ルーム名修正ボタン（一時的） */}
-      {autoSaveRooms.length > 0 && autoSaveRooms.some(r => !r.roomName) && (
+      {shouldShowFixButton() && (
         <button
           onClick={fixRoomNames}
           style={{
@@ -260,6 +307,24 @@ export default function Home() {
         >
           🔧 ルーム名を修正（1回だけクリック）
         </button>
+      )}
+      
+      {/* デバッグ情報（開発時のみ表示） */}
+      {shouldShowFixButton() && (
+        <div style={{ 
+          backgroundColor: '#fef3c7', 
+          padding: '10px', 
+          borderRadius: '8px', 
+          marginBottom: '20px',
+          fontSize: '12px'
+        }}>
+          <p style={{ margin: '0 0 5px 0' }}>
+            ルーム情報: {rooms.length}件読み込み済み
+          </p>
+          <p style={{ margin: 0 }}>
+            修正が必要な自動保存: {autoSaveRooms.filter(r => !r.roomName || r.roomName === 'Unknown').length}件
+          </p>
+        </div>
       )}
       
       {/* 自動保存状況の表示 */}
@@ -372,7 +437,7 @@ export default function Home() {
               fontSize: '16px',
               backgroundColor: selectedRoom && isAutoSaveEnabled(selectedRoom) ? '#f0f9ff' : 'white'
             }}
-            disabled={!apiToken}
+            disabled={!apiToken && rooms.length === 0}
           >
             <option value="">ルームを選択してください</option>
             {rooms.map((room) => (
