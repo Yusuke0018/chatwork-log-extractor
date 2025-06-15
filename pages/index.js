@@ -505,10 +505,6 @@ export default function Home() {
           {showSuccess}
         </div>
       )}
-      {/* The <style jsx global> tag has been removed to prevent build errors.
-        If the build succeeds with this change, the animation can be re-added
-        using a standard global CSS file (e.g., styles/globals.css).
-      */}
     </div>
   );
 }
