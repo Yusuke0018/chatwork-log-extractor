@@ -195,9 +195,13 @@ export default function ChatworkLogExtractor() {
       saved.splice(existingIndex, 1);
       setShowSuccess('自動保存を解除しました');
     } else {
-      // 新規登録
+      // 新規登録（10個まで）
+      if (saved.length >= 10) {
+        setError('自動保存は最大10個までです。他のルームの自動保存を解除してください。');
+        return;
+      }
       saved.push(roomData);
-      setShowSuccess('自動保存を設定しました（3日ごと）');
+      setShowSuccess(`自動保存を設定しました（${saved.length}/10）`);
     }
 
     localStorage.setItem('autoSaveRooms', JSON.stringify(saved));
@@ -216,7 +220,8 @@ export default function ChatworkLogExtractor() {
     const now = new Date();
     let updated = false;
 
-    for (const room of saved) {
+    // 最大10個まで処理
+    for (const room of saved.slice(0, 10)) {
       const nextSave = new Date(room.nextSave || 0);
       
       if (now >= nextSave) {
@@ -271,6 +276,8 @@ export default function ChatworkLogExtractor() {
       localStorage.setItem('autoSaveRooms', JSON.stringify(saved));
       loadSavedLogs();
       loadAutoSaveSettings();
+      setShowSuccess('自動保存を実行しました');
+      setTimeout(() => setShowSuccess(false), 3000);
     }
   };
 
@@ -359,26 +366,33 @@ export default function ChatworkLogExtractor() {
                 </select>
                 <button
                   onClick={toggleAutoSave}
-                  disabled={!selectedRoom}
+                  disabled={!selectedRoom || (!isAutoSaveEnabled(selectedRoom) && autoSaveRooms.length >= 10)}
                   style={{
                     padding: '0.75rem 1rem',
-                    backgroundColor: isAutoSaveEnabled(selectedRoom) ? '#ef4444' : '#10b981',
+                    backgroundColor: isAutoSaveEnabled(selectedRoom) ? '#ef4444' : autoSaveRooms.length >= 10 ? '#9ca3af' : '#10b981',
                     color: 'white',
                     fontWeight: '600',
                     borderRadius: '0.5rem',
                     fontSize: '0.875rem',
                     border: 'none',
-                    cursor: selectedRoom ? 'pointer' : 'not-allowed'
+                    cursor: selectedRoom && (isAutoSaveEnabled(selectedRoom) || autoSaveRooms.length < 10) ? 'pointer' : 'not-allowed'
                   }}
-                  title="3日ごとに自動保存"
+                  title={autoSaveRooms.length >= 10 && !isAutoSaveEnabled(selectedRoom) ? '自動保存は最大10個まで' : '3日ごとに自動保存'}
                 >
-                  {isAutoSaveEnabled(selectedRoom) ? '自動OFF' : '自動ON'}
+                  {isAutoSaveEnabled(selectedRoom) ? '自動OFF' : autoSaveRooms.length >= 10 ? '上限到達' : '自動ON'}
                 </button>
               </div>
               {autoSaveRooms.length > 0 && (
-                <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.5rem' }}>
-                  ⏰ = 3日ごとに自動保存中
-                </p>
+                <div style={{ marginTop: '0.5rem' }}>
+                  <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                    ⏰ 自動保存中: {autoSaveRooms.length}/10 ルーム
+                  </p>
+                  {autoSaveRooms.length >= 8 && (
+                    <p style={{ fontSize: '0.75rem', color: '#dc2626' }}>
+                      ※あと{10 - autoSaveRooms.length}個まで設定可能
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 
@@ -490,6 +504,36 @@ export default function ChatworkLogExtractor() {
             </div>
           )}
 
+          {autoSaveRooms.length > 0 && (
+            <div style={{ marginTop: '2rem', paddingTop: '2rem', borderTop: '2px solid #e5e7eb' }}>
+              <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem' }}>
+                自動保存設定中のルーム ({autoSaveRooms.length}/10)
+              </h3>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                {autoSaveRooms.map((room) => (
+                  <div
+                    key={room.roomId}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      backgroundColor: '#dbeafe',
+                      border: '1px solid #3b82f6',
+                      borderRadius: '9999px',
+                      fontSize: '0.75rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}
+                  >
+                    <span>⏰ {room.roomName}</span>
+                    <span style={{ color: '#6b7280' }}>
+                      次回: {new Date(room.nextSave).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {savedLogs.length > 0 && (
             <div style={{ marginTop: '2rem', paddingTop: '2rem', borderTop: '2px solid #e5e7eb' }}>
               <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem' }}>
@@ -537,5 +581,7 @@ export default function ChatworkLogExtractor() {
         }
       `}</style>
     </div>
+  );
+}
   );
 }
