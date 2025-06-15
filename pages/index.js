@@ -12,7 +12,8 @@ export default function Home() {
   const [error, setError] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [autoSaveRooms, setAutoSaveRooms] = useState([]);
-  const [autoSaveDays, setAutoSaveDays] = useState(3); // デフォルト3日
+  const [autoSaveDays, setAutoSaveDays] = useState(3);
+  const [savedLogs, setSavedLogs] = useState([]);
   
   useEffect(() => {
     const savedToken = localStorage.getItem('chatworkApiToken');
@@ -25,11 +26,17 @@ export default function Home() {
     setEndDate(today.toISOString().split('T')[0]);
     setStartDate(threeDaysAgo.toISOString().split('T')[0]);
     loadAutoSaveSettings();
+    loadSavedLogs();
   }, []);
 
   const loadAutoSaveSettings = () => {
     const saved = JSON.parse(localStorage.getItem('autoSaveRooms') || '[]');
     setAutoSaveRooms(saved);
+  };
+
+  const loadSavedLogs = () => {
+    const logs = JSON.parse(localStorage.getItem('savedLogs') || '[]');
+    setSavedLogs(logs);
   };
 
   const loadRooms = async (token) => {
@@ -87,6 +94,27 @@ export default function Home() {
       if (data.count === 100) {
         setError('※最新100件のみ表示されています');
       }
+      
+      // ログを保存
+      const roomName = rooms.find(r => r.room_id === selectedRoom)?.name || 'Unknown';
+      const newLog = {
+        id: Date.now().toString(),
+        roomName,
+        roomId: selectedRoom,
+        content: data.messages,
+        count: data.count,
+        startDate,
+        endDate,
+        savedAt: new Date().toISOString(),
+        isAutoSave: false
+      };
+      
+      const logs = JSON.parse(localStorage.getItem('savedLogs') || '[]');
+      logs.unshift(newLog);
+      const trimmedLogs = logs.slice(0, 50);
+      localStorage.setItem('savedLogs', JSON.stringify(trimmedLogs));
+      loadSavedLogs();
+      
     } catch (err) {
       setError('メッセージの取得に失敗しました');
     }
@@ -99,7 +127,7 @@ export default function Home() {
     const roomData = {
       roomId: selectedRoom,
       roomName: rooms.find(r => r.room_id === selectedRoom)?.name,
-      days: autoSaveDays // 保存期間を追加
+      days: autoSaveDays
     };
     const existingIndex = saved.findIndex(r => r.roomId === selectedRoom);
     if (existingIndex >= 0) {
@@ -147,6 +175,28 @@ export default function Home() {
     } catch (err) {
       setError('コピーに失敗しました');
     }
+  };
+
+  const downloadAsText = () => {
+    const roomName = rooms.find(r => r.room_id === selectedRoom)?.name || 'チャット';
+    const blob = new Blob([messages], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Chatwork_${roomName}_${startDate}_${endDate}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const viewSavedLog = (log) => {
+    setMessages(log.content);
+    setMessageCount(log.count || 0);
+    setSelectedRoom(log.roomId || '');
+    setStartDate(log.startDate);
+    setEndDate(log.endDate);
+    window.scrollTo(0, 0);
   };
 
   return (
@@ -399,21 +449,87 @@ export default function Home() {
               {messages}
             </pre>
           </div>
-          <button
-            onClick={copyToClipboard}
-            style={{
-              marginTop: '10px',
-              padding: '10px',
-              width: '100%',
-              backgroundColor: '#2563eb',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer'
-            }}
-          >
-            コピー
-          </button>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+            <button
+              onClick={copyToClipboard}
+              style={{
+                flex: 1,
+                padding: '10px',
+                backgroundColor: '#2563eb',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer'
+              }}
+            >
+              コピー
+            </button>
+            <button
+              onClick={downloadAsText}
+              style={{
+                flex: 1,
+                padding: '10px',
+                backgroundColor: '#2563eb',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer'
+              }}
+            >
+              ダウンロード
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* 保存履歴の表示 */}
+      {savedLogs.length > 0 && (
+        <div style={{ 
+          marginTop: '30px', 
+          paddingTop: '30px', 
+          borderTop: '2px solid #e5e7eb' 
+        }}>
+          <h3 style={{ marginBottom: '15px', color: '#1f2937' }}>
+            📋 保存履歴（最新{Math.min(savedLogs.length, 20)}件）
+          </h3>
+          <div style={{ maxHeight: '400px', overflow: 'auto' }}>
+            {savedLogs.slice(0, 20).map((log) => (
+              <div
+                key={log.id}
+                onClick={() => viewSavedLog(log)}
+                style={{
+                  padding: '12px',
+                  marginBottom: '8px',
+                  backgroundColor: log.isAutoSave ? '#f0f9ff' : '#f9fafb',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                  <strong style={{ color: '#1f2937' }}>{log.roomName}</strong>
+                  <span style={{ fontSize: '14px', color: '#6b7280' }}>
+                    {log.count}件 {log.isAutoSave && '🤖'}
+                  </span>
+                </div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                  {log.startDate} 〜 {log.endDate}
+                </div>
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '3px' }}>
+                  保存日時: {new Date(log.savedAt).toLocaleString('ja-JP')}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       
