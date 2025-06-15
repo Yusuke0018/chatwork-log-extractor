@@ -46,6 +46,8 @@ export default function Home() {
         { room_id: '12345', name: '全体ミーティング' },
         { room_id: '12346', name: '経営会議' },
         { room_id: '12347', name: 'スタッフルーム' },
+        { room_id: '12348', name: '開発チーム' },
+        { room_id: '12349', name: '営業チーム' },
       ]);
     }
   };
@@ -100,18 +102,18 @@ export default function Home() {
     const existingIndex = saved.findIndex(r => r.roomId === selectedRoom);
     if (existingIndex >= 0) {
       saved.splice(existingIndex, 1);
-      setShowSuccess('自動保存を解除しました');
+      setShowSuccess('自動保存を【解除】しました');
     } else {
       if (saved.length >= 10) {
         setError('自動保存は最大10個までです');
         return;
       }
       saved.push(roomData);
-      setShowSuccess(`自動保存を設定しました（${saved.length}/10）`);
+      setShowSuccess(`自動保存を【開始】しました（${saved.length}/10）`);
     }
     localStorage.setItem('autoSaveRooms', JSON.stringify(saved));
     setAutoSaveRooms(saved);
-    setTimeout(() => setShowSuccess(false), 2000);
+    setTimeout(() => setShowSuccess(false), 3000);
   };
 
   const isAutoSaveEnabled = (roomId) => {
@@ -139,6 +141,41 @@ export default function Home() {
           初回のみAPIトークンの設定が必要です
         </p>
       </div>
+      
+      {/* 自動保存状況の表示（目立つ位置に移動） */}
+      {autoSaveRooms.length > 0 && (
+        <div style={{ 
+          backgroundColor: '#f0f9ff', 
+          border: '2px solid #0ea5e9',
+          padding: '15px', 
+          borderRadius: '8px', 
+          marginBottom: '20px' 
+        }}>
+          <h3 style={{ margin: '0 0 10px 0', color: '#0284c7', fontSize: '16px' }}>
+            🤖 自動保存中のルーム（{autoSaveRooms.length}/10）
+          </h3>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {autoSaveRooms.map((room) => (
+              <span 
+                key={room.roomId} 
+                style={{ 
+                  backgroundColor: '#0ea5e9',
+                  color: 'white',
+                  padding: '5px 12px',
+                  borderRadius: '20px',
+                  fontSize: '14px',
+                  fontWeight: 'bold'
+                }}
+              >
+                ⏰ {room.roomName}
+              </span>
+            ))}
+          </div>
+          <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#64748b' }}>
+            ※3日ごとに自動でログを保存します
+          </p>
+        </div>
+      )}
       
       <div style={{ marginBottom: '20px' }}>
         <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
@@ -172,14 +209,15 @@ export default function Home() {
               padding: '10px',
               border: '2px solid #e5e7eb',
               borderRadius: '8px',
-              fontSize: '16px'
+              fontSize: '16px',
+              backgroundColor: selectedRoom && isAutoSaveEnabled(selectedRoom) ? '#f0f9ff' : 'white'
             }}
             disabled={!apiToken}
           >
             <option value="">ルームを選択してください</option>
             {rooms.map((room) => (
               <option key={room.room_id} value={room.room_id}>
-                {room.name} {isAutoSaveEnabled(room.room_id) ? '⏰' : ''}
+                {isAutoSaveEnabled(room.room_id) ? '⏰ ' : ''}{room.name}
               </option>
             ))}
           </select>
@@ -188,19 +226,29 @@ export default function Home() {
             disabled={!selectedRoom || (!isAutoSaveEnabled(selectedRoom) && autoSaveRooms.length >= 10)}
             style={{
               padding: '10px 20px',
-              backgroundColor: isAutoSaveEnabled(selectedRoom) ? '#ef4444' : autoSaveRooms.length >= 10 ? '#9ca3af' : '#10b981',
-              color: 'white',
+              backgroundColor: !selectedRoom ? '#e5e7eb' : isAutoSaveEnabled(selectedRoom) ? '#ef4444' : autoSaveRooms.length >= 10 ? '#9ca3af' : '#10b981',
+              color: !selectedRoom ? '#9ca3af' : 'white',
               border: 'none',
               borderRadius: '8px',
-              cursor: selectedRoom ? 'pointer' : 'not-allowed'
+              cursor: selectedRoom && (isAutoSaveEnabled(selectedRoom) || autoSaveRooms.length < 10) ? 'pointer' : 'not-allowed',
+              fontWeight: 'bold',
+              fontSize: '16px',
+              minWidth: '120px'
             }}
           >
-            {isAutoSaveEnabled(selectedRoom) ? '自動OFF' : autoSaveRooms.length >= 10 ? '上限' : '自動ON'}
+            {!selectedRoom ? '選択して' : isAutoSaveEnabled(selectedRoom) ? '🔴 自動OFF' : autoSaveRooms.length >= 10 ? '❌ 上限' : '🟢 自動ON'}
           </button>
         </div>
-        {autoSaveRooms.length > 0 && (
-          <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '5px' }}>
-            ⏰ 自動保存中: {autoSaveRooms.length}/10
+        {selectedRoom && (
+          <p style={{ 
+            fontSize: '12px', 
+            marginTop: '5px',
+            color: isAutoSaveEnabled(selectedRoom) ? '#0ea5e9' : '#6b7280',
+            fontWeight: isAutoSaveEnabled(selectedRoom) ? 'bold' : 'normal'
+          }}>
+            {isAutoSaveEnabled(selectedRoom) 
+              ? '✅ このルームは自動保存が有効です' 
+              : '❌ このルームは自動保存されていません'}
           </p>
         )}
       </div>
@@ -274,7 +322,7 @@ export default function Home() {
       
       {messages && (
         <div style={{ marginTop: '20px' }}>
-          <h3>取得結果</h3>
+          <h3>取得結果（{messageCount}件）</h3>
           <div style={{
             backgroundColor: '#f9fafb',
             border: '1px solid #e5e7eb',
@@ -305,17 +353,6 @@ export default function Home() {
         </div>
       )}
       
-      {autoSaveRooms.length > 0 && (
-        <div style={{ marginTop: '20px' }}>
-          <h4>自動保存設定中:</h4>
-          {autoSaveRooms.map((room) => (
-            <div key={room.roomId} style={{ fontSize: '14px', marginLeft: '10px' }}>
-              • {room.roomName}
-            </div>
-          ))}
-        </div>
-      )}
-      
       {showSuccess && (
         <div style={{
           position: 'fixed',
@@ -327,7 +364,9 @@ export default function Home() {
           padding: '15px 25px',
           borderRadius: '8px',
           boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-          zIndex: 1000
+          zIndex: 1000,
+          fontWeight: 'bold',
+          fontSize: '16px'
         }}>
           {showSuccess}
         </div>
