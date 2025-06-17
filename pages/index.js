@@ -17,6 +17,7 @@ export default function Home() {
   const [debugMode, setDebugMode] = useState(false);
   const [autoSaveProgress, setAutoSaveProgress] = useState(''); // 自動保存の進行状況
   const [isMobile, setIsMobile] = useState(false);
+  const [roomSearchQuery, setRoomSearchQuery] = useState(''); // ルーム検索用
   
   useEffect(() => {
     // モバイル判定
@@ -45,6 +46,15 @@ export default function Home() {
     
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // ルーム検索フィルタリング
+  const filteredRooms = rooms.filter(room => {
+    if (!roomSearchQuery) return true;
+    const query = roomSearchQuery.toLowerCase();
+    const roomName = room.name.toLowerCase();
+    const roomId = String(room.room_id).toLowerCase();
+    return roomName.includes(query) || roomId.includes(query);
+  });
 
   // 自動保存のチェックと実行
   const checkAndExecuteAutoSave = async (token) => {
@@ -817,6 +827,62 @@ export default function Home() {
         }}>
           ルームを選択
         </label>
+        
+        {/* ルーム検索ボックス */}
+        {rooms.length > 5 && (
+          <div style={{ marginBottom: '10px' }}>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="text"
+                value={roomSearchQuery}
+                onChange={(e) => setRoomSearchQuery(e.target.value)}
+                placeholder="🔍 ルーム名またはIDで検索..."
+                style={{
+                  width: '100%',
+                  padding: isMobile ? '10px 40px 10px 10px' : '8px 40px 8px 8px',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  boxSizing: 'border-box',
+                  WebkitAppearance: 'none',
+                  backgroundColor: '#f9fafb'
+                }}
+              />
+              {roomSearchQuery && (
+                <button
+                  onClick={() => setRoomSearchQuery('')}
+                  style={{
+                    position: 'absolute',
+                    right: '10px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '20px',
+                    color: '#6b7280',
+                    padding: '5px'
+                  }}
+                  aria-label="検索をクリア"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            {roomSearchQuery && (
+              <p style={{ 
+                fontSize: '12px', 
+                color: filteredRooms.length === 0 ? '#ef4444' : '#6b7280', 
+                marginTop: '5px' 
+              }}>
+                {filteredRooms.length === 0 
+                  ? '該当するルームが見つかりません' 
+                  : `検索結果: ${filteredRooms.length}件`}
+              </p>
+            )}
+          </div>
+        )}
+        
         <div style={{ 
           display: 'flex', 
           gap: '10px',
@@ -841,7 +907,18 @@ export default function Home() {
             disabled={rooms.length === 0}
           >
             <option value="">ルームを選択してください</option>
-            {rooms.map((room) => (
+            {/* 選択中のルームが検索結果に含まれない場合も表示 */}
+            {selectedRoom && !filteredRooms.find(r => String(r.room_id) === String(selectedRoom)) && (
+              (() => {
+                const selectedRoomData = rooms.find(r => String(r.room_id) === String(selectedRoom));
+                return selectedRoomData ? (
+                  <option key={selectedRoomData.room_id} value={selectedRoomData.room_id} style={{ backgroundColor: '#fef3c7' }}>
+                    {isAutoSaveEnabled(selectedRoomData.room_id) ? '⏰ ' : ''}【選択中】 {selectedRoomData.name}
+                  </option>
+                ) : null;
+              })()
+            )}
+            {filteredRooms.map((room) => (
               <option key={room.room_id} value={room.room_id}>
                 {isAutoSaveEnabled(room.room_id) ? '⏰ ' : ''}{room.name}
               </option>
