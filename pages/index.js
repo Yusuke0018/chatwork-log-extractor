@@ -552,19 +552,22 @@ export default function Home() {
 
   // キーボード操作処理
   const handleSearchKeyDown = (e) => {
-    if (!showSearchDropdown || filteredRooms.length === 0) return;
+    if (!showSearchDropdown) return;
+
+    const currentRooms = roomSearchQuery ? filteredRooms : rooms;
+    if (currentRooms.length === 0) return;
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setSearchHighlightIndex(prev => 
-        prev < filteredRooms.length - 1 ? prev + 1 : prev
+        prev < currentRooms.length - 1 ? prev + 1 : prev
       );
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setSearchHighlightIndex(prev => prev > 0 ? prev - 1 : -1);
     } else if (e.key === 'Enter' && searchHighlightIndex >= 0) {
       e.preventDefault();
-      selectSearchCandidate(filteredRooms[searchHighlightIndex].room_id);
+      selectSearchCandidate(currentRooms[searchHighlightIndex].room_id);
     } else if (e.key === 'Escape') {
       setShowSearchDropdown(false);
       setSearchHighlightIndex(-1);
@@ -869,18 +872,25 @@ export default function Home() {
         {/* ルーム検索ボックス */}
         {rooms.length > 0 && (
           <div style={{ marginBottom: '10px', position: 'relative' }}>
+            <p style={{ 
+              fontSize: '12px', 
+              color: '#6b7280', 
+              marginBottom: '5px' 
+            }}>
+              🔍 検索して選択（または下のプルダウンから選択）
+            </p>
             <div style={{ position: 'relative' }}>
               <input
                 type="text"
                 value={roomSearchQuery}
                 onChange={(e) => {
                   setRoomSearchQuery(e.target.value);
-                  setShowSearchDropdown(e.target.value.length > 0);
+                  setShowSearchDropdown(true);
                   setSearchHighlightIndex(-1);
                 }}
                 onKeyDown={handleSearchKeyDown}
                 onFocus={() => {
-                  if (roomSearchQuery) setShowSearchDropdown(true);
+                  setShowSearchDropdown(true);
                 }}
                 onBlur={() => {
                   // 少し遅延を入れて、クリックが完了してから閉じる
@@ -890,6 +900,7 @@ export default function Home() {
                   }, 200);
                 }}
                 placeholder="🔍 ルーム名またはIDで検索..."
+                autoComplete="off"
                 style={{
                   width: '100%',
                   padding: isMobile ? '10px 40px 10px 10px' : '8px 40px 8px 8px',
@@ -957,13 +968,16 @@ export default function Home() {
                         alignItems: 'center',
                         gap: '8px',
                         transition: 'background-color 0.2s',
-                        backgroundColor: String(room.room_id) === String(selectedRoom) ? '#f0f9ff' : 'transparent'
+                        backgroundColor: index === searchHighlightIndex ? '#e0f2fe' :
+                                       String(room.room_id) === String(selectedRoom) ? '#f0f9ff' : 'transparent'
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.backgroundColor = '#f3f4f6';
+                        setSearchHighlightIndex(index);
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.backgroundColor = 
+                          index === searchHighlightIndex ? '#e0f2fe' :
                           String(room.room_id) === String(selectedRoom) ? '#f0f9ff' : 'transparent';
                       }}
                     >
@@ -1057,8 +1071,11 @@ export default function Home() {
                   color: '#6b7280',
                   textAlign: 'center'
                 }}>
-                  {filteredRooms.length}件 / 全{rooms.length}件
-                  {filteredRooms.length > 0 && (
+                  {roomSearchQuery ? 
+                    `${filteredRooms.length}件 / 全${rooms.length}件` :
+                    `全${rooms.length}件`
+                  }
+                  {((roomSearchQuery && filteredRooms.length > 0) || (!roomSearchQuery && rooms.length > 0)) && (
                     <span style={{ marginLeft: '8px' }}>
                       ↑↓キーで選択
                     </span>
@@ -1072,62 +1089,35 @@ export default function Home() {
         <div style={{ 
           display: 'flex', 
           gap: '10px',
-          flexDirection: isMobile ? 'column' : 'row'
+          flexDirection: isMobile ? 'column' : 'row',
+          alignItems: 'center'
         }}>
-          {/* 選択されたルームの表示 */}
-          <div style={{
-            flex: 1,
-            padding: isMobile ? '12px' : '10px',
-            border: '2px solid #e5e7eb',
-            borderRadius: '8px',
-            fontSize: '16px',
-            backgroundColor: selectedRoom && isAutoSaveEnabled(selectedRoom) ? '#f0f9ff' : 'white',
-            boxSizing: 'border-box',
-            color: selectedRoom ? '#1f2937' : '#9ca3af',
-            fontWeight: selectedRoom ? 'bold' : 'normal',
-            position: 'relative'
-          }}>
-            {selectedRoom ? 
-              (() => {
-                const room = rooms.find(r => String(r.room_id) === String(selectedRoom));
-                return room ? (
-                  <div style={{ paddingRight: '30px' }}>
-                    {isAutoSaveEnabled(selectedRoom) && '⏰ '}
-                    {room.name}
-                    <span style={{ 
-                      fontSize: '12px', 
-                      color: '#6b7280', 
-                      marginLeft: '8px',
-                      fontWeight: 'normal'
-                    }}>
-                      (ID: {selectedRoom})
-                    </span>
-                  </div>
-                ) : `ルームID: ${selectedRoom}`;
-              })()
-              : '上の検索窓でルームを検索してください'
-            }
-            {selectedRoom && (
-              <button
-                onClick={() => setSelectedRoom('')}
-                style={{
-                  position: 'absolute',
-                  right: '5px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '16px',
-                  color: '#6b7280',
-                  padding: '5px'
-                }}
-                aria-label="選択を解除"
-              >
-                ×
-              </button>
-            )}
-          </div>
+          <select
+            value={selectedRoom}
+            onChange={(e) => {
+              console.log('ルーム選択変更:', e.target.value);
+              setSelectedRoom(e.target.value);
+              setRoomSearchQuery(''); // 選択したら検索をクリア
+            }}
+            style={{
+              flex: 1,
+              padding: isMobile ? '12px' : '10px',
+              border: '2px solid #e5e7eb',
+              borderRadius: '8px',
+              fontSize: '16px',
+              backgroundColor: selectedRoom && isAutoSaveEnabled(selectedRoom) ? '#f0f9ff' : 'white',
+              boxSizing: 'border-box',
+              WebkitAppearance: 'none'
+            }}
+            disabled={rooms.length === 0}
+          >
+            <option value="">ルームを選択してください</option>
+            {rooms.map((room) => (
+              <option key={room.room_id} value={room.room_id}>
+                {isAutoSaveEnabled(room.room_id) ? '⏰ ' : ''}{room.name}
+              </option>
+            ))}
+          </select>
           <button
             onClick={toggleAutoSave}
             disabled={!selectedRoom || (!isAutoSaveEnabled(selectedRoom) && autoSaveRooms.length >= 10)}
@@ -1147,6 +1137,37 @@ export default function Home() {
             {!selectedRoom ? '選択して' : isAutoSaveEnabled(selectedRoom) ? '🔴 定期OFF' : autoSaveRooms.length >= 10 ? '❌ 上限' : '🟢 定期ON'}
           </button>
         </div>
+        
+        {selectedRoom && (
+          <div style={{ 
+            marginTop: '10px',
+            padding: '10px',
+            backgroundColor: '#f0f9ff',
+            borderRadius: '8px',
+            border: '1px solid #0ea5e9',
+            fontSize: '14px'
+          }}>
+            <strong style={{ color: '#0284c7' }}>選択中のルーム:</strong>
+            <div style={{ marginTop: '5px' }}>
+              {(() => {
+                const room = rooms.find(r => String(r.room_id) === String(selectedRoom));
+                return room ? (
+                  <>
+                    {isAutoSaveEnabled(selectedRoom) && '⏰ '}
+                    {room.name}
+                    <span style={{ 
+                      fontSize: '12px', 
+                      color: '#6b7280', 
+                      marginLeft: '8px'
+                    }}>
+                      (ID: {selectedRoom})
+                    </span>
+                  </>
+                ) : `ルームID: ${selectedRoom}`;
+              })()}
+            </div>
+          </div>
+        )}
         
         {selectedRoom && !isAutoSaveEnabled(selectedRoom) && autoSaveRooms.length < 10 && (
           <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
