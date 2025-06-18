@@ -1184,6 +1184,14 @@ export default function Home() {
       </div>
       
       <div style={{ marginBottom: '20px' }}>
+        <label style={{ 
+          display: 'block', 
+          marginBottom: '5px', 
+          fontWeight: 'bold',
+          fontSize: isMobile ? '14px' : '16px'
+        }}>
+          期間選択
+        </label>
         <div style={{ 
           display: 'grid', 
           gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', 
@@ -1349,7 +1357,8 @@ export default function Home() {
                   border: '1px solid #e5e7eb',
                   borderRadius: '8px',
                   cursor: 'pointer',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s',
+                  userSelect: 'none'
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-2px)';
