@@ -866,19 +866,12 @@ export default function Home() {
           fontWeight: 'bold',
           fontSize: isMobile ? '14px' : '16px'
         }}>
-          ルームを選択
+          ルーム検索
         </label>
         
         {/* ルーム検索ボックス */}
         {rooms.length > 0 && (
           <div style={{ marginBottom: '10px', position: 'relative' }}>
-            <p style={{ 
-              fontSize: '12px', 
-              color: '#6b7280', 
-              marginBottom: '5px' 
-            }}>
-              🔍 検索して選択（または下のプルダウンから選択）
-            </p>
             <div style={{ position: 'relative' }}>
               <input
                 type="text"
@@ -899,7 +892,7 @@ export default function Home() {
                     setSearchHighlightIndex(-1);
                   }, 200);
                 }}
-                placeholder="🔍 ルーム名またはIDで検索..."
+                placeholder="🔍 クリックして全ルーム表示 / 入力して検索..."
                 autoComplete="off"
                 style={{
                   width: '100%',
@@ -937,6 +930,17 @@ export default function Home() {
                 </button>
               )}
             </div>
+            
+            {/* 選択されていない場合のヒント */}
+            {!selectedRoom && !showSearchDropdown && (
+              <p style={{ 
+                fontSize: '12px', 
+                color: '#6b7280', 
+                marginTop: '5px' 
+              }}>
+                クリックして全ルームを表示、または入力して検索
+              </p>
+            )}
             
             {/* 検索候補ドロップダウン */}
             {showSearchDropdown && (
@@ -1118,56 +1122,32 @@ export default function Home() {
               </option>
             ))}
           </select>
-          <button
-            onClick={toggleAutoSave}
-            disabled={!selectedRoom || (!isAutoSaveEnabled(selectedRoom) && autoSaveRooms.length >= 10)}
-            style={{
-              padding: isMobile ? '12px 20px' : '10px 20px',
-              backgroundColor: !selectedRoom ? '#e5e7eb' : isAutoSaveEnabled(selectedRoom) ? '#ef4444' : autoSaveRooms.length >= 10 ? '#9ca3af' : '#10b981',
-              color: !selectedRoom ? '#9ca3af' : 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: selectedRoom && (isAutoSaveEnabled(selectedRoom) || autoSaveRooms.length < 10) ? 'pointer' : 'not-allowed',
-              fontWeight: 'bold',
-              fontSize: '16px',
-              minWidth: isMobile ? '100%' : '120px',
-              WebkitAppearance: 'none'
-            }}
-          >
-            {!selectedRoom ? '選択して' : isAutoSaveEnabled(selectedRoom) ? '🔴 定期OFF' : autoSaveRooms.length >= 10 ? '❌ 上限' : '🟢 定期ON'}
-          </button>
-        </div>
-        
-        {selectedRoom && (
           <div style={{ 
-            marginTop: '10px',
-            padding: '10px',
-            backgroundColor: '#f0f9ff',
-            borderRadius: '8px',
-            border: '1px solid #0ea5e9',
-            fontSize: '14px'
+            display: 'flex', 
+            gap: '10px',
+            flexDirection: isMobile ? 'column' : 'row',
+            alignItems: 'stretch'
           }}>
-            <strong style={{ color: '#0284c7' }}>選択中のルーム:</strong>
-            <div style={{ marginTop: '5px' }}>
-              {(() => {
-                const room = rooms.find(r => String(r.room_id) === String(selectedRoom));
-                return room ? (
-                  <>
-                    {isAutoSaveEnabled(selectedRoom) && '⏰ '}
-                    {room.name}
-                    <span style={{ 
-                      fontSize: '12px', 
-                      color: '#6b7280', 
-                      marginLeft: '8px'
-                    }}>
-                      (ID: {selectedRoom})
-                    </span>
-                  </>
-                ) : `ルームID: ${selectedRoom}`;
-              })()}
-            </div>
+            <button
+              onClick={toggleAutoSave}
+              disabled={!selectedRoom || (!isAutoSaveEnabled(selectedRoom) && autoSaveRooms.length >= 10)}
+              style={{
+                padding: isMobile ? '12px 20px' : '10px 20px',
+                backgroundColor: !selectedRoom ? '#e5e7eb' : isAutoSaveEnabled(selectedRoom) ? '#ef4444' : autoSaveRooms.length >= 10 ? '#9ca3af' : '#10b981',
+                color: !selectedRoom ? '#9ca3af' : 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: selectedRoom && (isAutoSaveEnabled(selectedRoom) || autoSaveRooms.length < 10) ? 'pointer' : 'not-allowed',
+                fontWeight: 'bold',
+                fontSize: '16px',
+                width: '100%',
+                WebkitAppearance: 'none'
+              }}
+            >
+              {!selectedRoom ? 'ルームを選択してください' : isAutoSaveEnabled(selectedRoom) ? '🔴 かんたん定期保存を解除' : autoSaveRooms.length >= 10 ? '❌ 上限に達しています' : '🟢 かんたん定期保存をON'}
+            </button>
           </div>
-        )}
+        </div>
         
         {selectedRoom && !isAutoSaveEnabled(selectedRoom) && autoSaveRooms.length < 10 && (
           <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
