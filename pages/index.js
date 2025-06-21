@@ -21,6 +21,8 @@ export default function App() {
   const [showSearchDropdown, setShowSearchDropdown] = useState(false); // 検索ドロップダウンの表示状態
   const [searchHighlightIndex, setSearchHighlightIndex] = useState(-1); // キーボード選択用のインデックス
   const searchInputRef = useRef(null); // 検索入力への参照
+  const [googleDocUrl, setGoogleDocUrl] = useState('');
+  const [favoriteDocs, setFavoriteDocs] = useState([]);
 
   useEffect(() => {
     // モバイル判定
@@ -46,9 +48,15 @@ export default function App() {
     setStartDate(threeDaysAgo.toISOString().split('T')[0]);
     loadAutoSaveSettings();
     loadSavedLogs();
+    const favs = JSON.parse(localStorage.getItem('favoriteDocs') || '[]');
+    setFavoriteDocs(favs);
 
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('favoriteDocs', JSON.stringify(favoriteDocs));
+  }, [favoriteDocs]);
 
   // 検索ドロップダウンが表示されたら入力欄にフォーカス
   useEffect(() => {
@@ -469,6 +477,55 @@ export default function App() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const formatForGoogleDoc = () => {
+    const now = new Date();
+    const roomName = rooms.find(r => String(r.room_id) === String(selectedRoom))?.name || 'チャット';
+    return [
+      `【Chatworkログ】${now.toLocaleDateString('ja-JP')} ${now.toLocaleTimeString('ja-JP')}`,
+      `ルーム: ${roomName}`,
+      `期間: ${startDate} 〜 ${endDate}`,
+      `メッセージ数: ${messageCount}件`,
+      '━━━━━━━━━━━━━━━━━━━━━━━━',
+      '',
+      messages,
+      '',
+      '━━━━━━━━━━━━━━━━━━━━━━━━'
+    ].join('\n');
+  };
+
+  const copyAndOpenDoc = async () => {
+    const text = formatForGoogleDoc();
+    try {
+      await navigator.clipboard.writeText(text);
+      setShowSuccess('コピーしました');
+      setTimeout(() => setShowSuccess(''), 2000);
+    } catch (err) {
+      setError('コピーに失敗しました');
+    }
+    const url = googleDocUrl || 'https://docs.new/';
+    window.open(url, '_blank');
+  };
+
+  const addFavoriteDoc = () => {
+    if (!googleDocUrl) return;
+    const name = prompt('ドキュメントの名前を入力してください');
+    if (!name) return;
+    let newFavs = favoriteDocs.filter(f => f.url !== googleDocUrl);
+    newFavs.unshift({ name, url: googleDocUrl });
+    if (newFavs.length > 5) newFavs = newFavs.slice(0, 5);
+    setFavoriteDocs(newFavs);
+  };
+
+  const removeFavoriteDoc = (url) => {
+    const newFavs = favoriteDocs.filter(f => f.url !== url);
+    setFavoriteDocs(newFavs);
+    if (googleDocUrl === url) setGoogleDocUrl('');
+  };
+
+  const selectFavoriteDoc = (url) => {
+    setGoogleDocUrl(url);
   };
 
   const viewSavedLog = (log) => {
@@ -1210,10 +1267,92 @@ export default function App() {
               }}
             >
               ダウンロード
-            </button>
-          </div>
+          </button>
         </div>
-      )}
+        <div style={{
+          marginTop: '20px',
+          backgroundColor: '#dbeafe',
+          padding: '15px',
+          borderRadius: '8px'
+        }}>
+          <h4 style={{ marginTop: 0 }}>📝 Googleドキュメントに保存</h4>
+          {favoriteDocs.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+              {favoriteDocs.map(doc => (
+                <div key={doc.url} style={{ position: 'relative' }}>
+                  <button
+                    onClick={() => selectFavoriteDoc(doc.url)}
+                    style={{
+                      padding: '6px 10px',
+                      backgroundColor: googleDocUrl === doc.url ? '#bfdbfe' : 'white',
+                      border: '1px solid #60a5fa',
+                      borderRadius: '6px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {doc.name}
+                  </button>
+                  <span
+                    onClick={() => removeFavoriteDoc(doc.url)}
+                    style={{
+                      position: 'absolute',
+                      top: '-5px',
+                      right: '-5px',
+                      cursor: 'pointer',
+                      color: '#ef4444',
+                      fontWeight: 'bold'
+                    }}
+                  >×</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <input
+            type="text"
+            placeholder="ドキュメントURL（空欄で新規作成）"
+            value={googleDocUrl}
+            onChange={(e) => setGoogleDocUrl(e.target.value)}
+            style={{
+              width: '100%',
+              marginBottom: '10px',
+              padding: '8px',
+              border: '1px solid #cbd5e1',
+              borderRadius: '6px'
+            }}
+          />
+          {googleDocUrl && favoriteDocs.length < 5 && (
+            <button
+              onClick={addFavoriteDoc}
+              style={{
+                marginBottom: '10px',
+                padding: '6px 10px',
+                backgroundColor: '#facc15',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer'
+              }}
+            >
+              ⭐ お気に入りに追加
+            </button>
+          )}
+          <button
+            onClick={copyAndOpenDoc}
+            style={{
+              width: '100%',
+              padding: '10px',
+              backgroundColor: '#0284c7',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: 'bold'
+            }}
+          >
+            📋 コピーしてドキュメントを開く
+          </button>
+        </div>
+      </div>
+    )}
 
       {/* 保存履歴の表示 */}
       {savedLogs.length > 0 && (
