@@ -31,9 +31,22 @@ export default async function handler(req, res) {
     });
     
     const formattedMessages = filteredMessages.map(msg => {
+      // タイムゾーンを日本時間に指定してフォーマット
       const date = new Date(msg.send_time * 1000);
-      const dateStr = date.toLocaleDateString('ja-JP');
-      const timeStr = date.toTimeString().slice(0, 5);
+      const dateStr = new Intl.DateTimeFormat('ja-JP', {
+          timeZone: 'Asia/Tokyo',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+      }).format(date);
+
+      const timeStr = new Intl.DateTimeFormat('ja-JP', {
+          timeZone: 'Asia/Tokyo',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+      }).format(date);
+
       return `[${dateStr} ${timeStr}] ${msg.account.name}: ${msg.body}`;
     }).join('\n');
     
