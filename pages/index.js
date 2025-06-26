@@ -24,6 +24,20 @@ export default function App() {
   const [googleDocUrl, setGoogleDocUrl] = useState('');
   const [favoriteDocs, setFavoriteDocs] = useState([]);
 
+  // 日本時間でフォーマットするためのヘルパー関数
+  const toJSTString = (date, options) => {
+    return new Date(date).toLocaleString('ja-JP', { ...options, timeZone: 'Asia/Tokyo' });
+  };
+  
+  const toJSTDateString = (date) => {
+      const d = new Date(date);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+  };
+
+
   useEffect(() => {
     // モバイル判定
     const checkMobile = () => {
@@ -44,8 +58,8 @@ export default function App() {
     }
     const today = new Date();
     const threeDaysAgo = new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000);
-    setEndDate(today.toISOString().split('T')[0]);
-    setStartDate(threeDaysAgo.toISOString().split('T')[0]);
+    setEndDate(toJSTDateString(today));
+    setStartDate(toJSTDateString(threeDaysAgo));
     loadAutoSaveSettings();
     loadSavedLogs();
     const favs = JSON.parse(localStorage.getItem('favoriteDocs') || '[]');
@@ -132,14 +146,17 @@ export default function App() {
 
         // 保存期間の日数を計算してログに出力
         const daysDiff = Math.floor((saveEndDate - saveStartDate) / (1000 * 60 * 60 * 24)) + 1;
-        console.log(`保存期間: ${daysDiff}日分（${saveStartDate.toLocaleDateString('ja-JP')}〜${saveEndDate.toLocaleDateString('ja-JP')}）`);
+        const startDateJST = toJSTString(saveStartDate, { year: 'numeric', month: '2-digit', day: '2-digit'});
+        const endDateJST = toJSTString(saveEndDate, { year: 'numeric', month: '2-digit', day: '2-digit'});
+
+        console.log(`保存期間: ${daysDiff}日分（${startDateJST}〜${endDateJST}）`);
 
         await autoSaveMessages(
           token,
           setting.roomId,
           setting.roomName,
-          saveStartDate.toISOString().split('T')[0],
-          saveEndDate.toISOString().split('T')[0]
+          toJSTDateString(saveStartDate),
+          toJSTDateString(saveEndDate)
         );
 
         // 最後の保存日を記録（昨日の日付を記録）
@@ -482,8 +499,10 @@ export default function App() {
   const formatForGoogleDoc = () => {
     const now = new Date();
     const roomName = rooms.find(r => String(r.room_id) === String(selectedRoom))?.name || 'チャット';
+    const jstNow = toJSTString(now, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'});
+
     return [
-      `【Chatworkログ】${now.toLocaleDateString('ja-JP')} ${now.toLocaleTimeString('ja-JP')}`,
+      `【Chatworkログ】${jstNow}`,
       `ルーム: ${roomName}`,
       `期間: ${startDate} 〜 ${endDate}`,
       `メッセージ数: ${messageCount}件`,
@@ -724,7 +743,8 @@ export default function App() {
           <strong>かんたん定期保存設定:</strong>{'\n'}
           {autoSaveRooms.map(r => {
             const lastSave = getLastAutoSaveDate(r.roomId);
-            return `ID: ${r.roomId} (${typeof r.roomId}), 名前: ${r.roomName || '未設定'}, ${r.days}日ごと, 最終: ${lastSave ? new Date(lastSave).toLocaleDateString('ja-JP') : '未実行'}`;
+            const lastSaveJST = lastSave ? toJSTString(lastSave, { year: 'numeric', month: '2-digit', day: '2-digit' }) : '未実行';
+            return `ID: ${r.roomId} (${typeof r.roomId}), 名前: ${r.roomName || '未設定'}, ${r.days}日ごと, 最終: ${lastSaveJST}`;
           }).join('\n')}
         </div>
       )}
@@ -812,12 +832,12 @@ export default function App() {
 
               if (lastSave) {
                 const lastSaveDate = new Date(lastSave);
-                statusText = lastSaveDate.toLocaleDateString('ja-JP');
+                statusText = toJSTString(lastSaveDate, { year: 'numeric', month: '2-digit', day: '2-digit' });
 
                 // 次回保存予定日（最後の保存日 + 1日 + 設定日数）
                 const next = new Date(lastSave);
                 next.setDate(next.getDate() + room.days + 1);
-                nextSaveDate = next.toLocaleDateString('ja-JP');
+                nextSaveDate = toJSTString(next, { year: 'numeric', month: '2-digit', day: '2-digit' });
 
                 // 現在取りこぼしている日数を計算
                 const today = new Date();
@@ -894,10 +914,10 @@ export default function App() {
               );
             })}
           </div>
-          <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#64748b' }}>
+          <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
             ※アプリを開いた時、設定日数が経過していれば自動でログを保存します
           </p>
-          <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#64748b' }}>
+          <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
             ※取りこぼしがある場合は、前回保存日の翌日から昨日までの全期間を保存
           </p>
         </div>
@@ -1398,7 +1418,7 @@ export default function App() {
                   {log.startDate} 〜 {log.endDate}
                 </div>
                 <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '3px' }}>
-                  保存日時: {new Date(log.savedAt).toLocaleString('ja-JP')}
+                  保存日時: {toJSTString(log.savedAt)}
                 </div>
               </div>
             ))}
